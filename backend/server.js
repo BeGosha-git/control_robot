@@ -1140,7 +1140,7 @@ app.post('/api/execute', async (req, res) => {
   lastInterrupt = false;
   processStartTime = Date.now();
 
-   // Используем spawn для прямого выполнения команды на хост-машине
+  // Используем spawn для прямого выполнения команды на хост-машине
   const proc = spawn('/bin/bash', ['-c', command], {
     windowsHide: true,
     detached: true,
