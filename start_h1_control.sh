@@ -24,16 +24,20 @@ error() {
     exit 1
 }
 
+# Функция для выполнения команд с sudo если нужно
+run_as_root() {
+    if [ "$EUID" -eq 0 ]; then
+        "$@"
+    else
+        sudo "$@"
+    fi
+}
+
 # Начинаем выполнение скрипта
 log "=== Начало выполнения скрипта ==="
 log "Текущая директория: $(pwd)"
 log "Пользователь: $(whoami)"
 log "Группы: $(groups)"
-
-# Проверка прав root
-if [ "$EUID" -ne 0 ]; then
-    error "Этот скрипт должен быть запущен с правами root"
-fi
 
 # Проверка наличия необходимых команд
 log "Проверка наличия необходимых команд..."
@@ -74,8 +78,8 @@ update_service() {
     info "Проверка системного сервиса..."
     
     # Устанавливаем права на выполнение для скрипта
-    chmod +x "$(pwd)/start_h1_control.sh" || error "Не удалось установить права на выполнение для start_h1_control.sh"
-    chown unitree:docker "$(pwd)/start_h1_control.sh" || error "Не удалось установить владельца для start_h1_control.sh"
+    run_as_root chmod +x "$(pwd)/start_h1_control.sh" || error "Не удалось установить права на выполнение для start_h1_control.sh"
+    run_as_root chown unitree:docker "$(pwd)/start_h1_control.sh" || error "Не удалось установить владельца для start_h1_control.sh"
     
     # Проверяем, существует ли файл сервиса
     if [ -f "/etc/systemd/system/control_robot.service" ]; then
@@ -83,28 +87,28 @@ update_service() {
         if ! cmp -s "control_robot.service" "/etc/systemd/system/control_robot.service"; then
             info "Обнаружена новая версия сервиса, обновляем..."
             # Останавливаем и отключаем старый сервис
-            systemctl stop control_robot 2>/dev/null
-            systemctl disable control_robot 2>/dev/null
+            run_as_root systemctl stop control_robot 2>/dev/null
+            run_as_root systemctl disable control_robot 2>/dev/null
             # Удаляем старый файл сервиса
-            rm -f /etc/systemd/system/control_robot.service
+            run_as_root rm -f /etc/systemd/system/control_robot.service
             # Копируем новый файл сервиса
-            cp control_robot.service /etc/systemd/system/ || error "Не удалось скопировать файл сервиса"
-            chmod 644 /etc/systemd/system/control_robot.service || error "Не удалось установить права на файл сервиса"
+            run_as_root cp control_robot.service /etc/systemd/system/ || error "Не удалось скопировать файл сервиса"
+            run_as_root chmod 644 /etc/systemd/system/control_robot.service || error "Не удалось установить права на файл сервиса"
             # Перезагружаем systemd и запускаем сервис
-            systemctl daemon-reload || error "Не удалось перезагрузить systemd"
-            systemctl enable control_robot.service || error "Не удалось включить сервис"
-            systemctl start control_robot.service || error "Не удалось запустить сервис"
+            run_as_root systemctl daemon-reload || error "Не удалось перезагрузить systemd"
+            run_as_root systemctl enable control_robot.service || error "Не удалось включить сервис"
+            run_as_root systemctl start control_robot.service || error "Не удалось запустить сервис"
             info "Сервис успешно обновлен"
         else
             info "Сервис актуален"
         fi
     else
         info "Установка нового сервиса..."
-        cp control_robot.service /etc/systemd/system/ || error "Не удалось скопировать файл сервиса"
-        chmod 644 /etc/systemd/system/control_robot.service || error "Не удалось установить права на файл сервиса"
-        systemctl daemon-reload || error "Не удалось перезагрузить systemd"
-        systemctl enable control_robot.service || error "Не удалось включить сервис"
-        systemctl start control_robot.service || error "Не удалось запустить сервис"
+        run_as_root cp control_robot.service /etc/systemd/system/ || error "Не удалось скопировать файл сервиса"
+        run_as_root chmod 644 /etc/systemd/system/control_robot.service || error "Не удалось установить права на файл сервиса"
+        run_as_root systemctl daemon-reload || error "Не удалось перезагрузить systemd"
+        run_as_root systemctl enable control_robot.service || error "Не удалось включить сервис"
+        run_as_root systemctl start control_robot.service || error "Не удалось запустить сервис"
         info "Сервис успешно установлен"
     fi
 }
@@ -180,22 +184,24 @@ else
     warn "Камера не найдена. Проверьте подключение и права доступа."
 fi
 
-# Запуск Docker контейнеров
+# Проверка и запуск Docker контейнеров
 info "Запуск Docker контейнеров..."
-docker compose up -d || error "Не удалось запустить контейнеры"
+if [ "$EUID" -eq 0 ]; then
+    # Если запущено от root, переключаемся на пользователя unitree
+    runuser -u unitree -- docker compose up -d || error "Не удалось запустить контейнеры"
+else
+    # Если запущено от unitree, запускаем напрямую
+    docker compose up -d || error "Не удалось запустить контейнеры"
+fi
 
-# Проверка статуса
-if systemctl is-active --quiet control_robot.service; then
-    info "Установка успешно завершена!"
-    echo -e "\nУправление сервисом:"
+# Проверка статуса сервиса
+if run_as_root systemctl is-active --quiet control_robot.service; then
+    info "Сервис успешно запущен"
+    echo "=== Управление сервисом ==="
     echo "Статус:    sudo systemctl status control_robot"
     echo "Логи:      sudo journalctl -u control_robot -f"
     echo "Перезапуск: sudo systemctl restart control_robot"
     echo "Остановка:  sudo systemctl stop control_robot"
-    
-    echo -e "\nПриложение доступно по адресам:"
-    echo "Frontend: http://localhost"
-    echo "Backend API: http://localhost:3001"
 else
     warn "Сервис не запущен. Проверьте логи: sudo journalctl -u control_robot -f"
 fi 
