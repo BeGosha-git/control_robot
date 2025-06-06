@@ -72,14 +72,14 @@ sudo systemctl start control_robot
 Проверка статуса контейнеров:
 ```bash
 docker ps
-docker-compose ps
+docker compose ps
 ```
 
 Перезапуск контейнеров:
 ```bash
 cd /home/unitree/control_robot
-docker-compose down
-docker-compose up -d
+docker compose down
+docker compose up -d
 ```
 
 ## Устранение неполадок
@@ -113,8 +113,8 @@ sudo systemctl restart docker
 
 # Перезапуск контейнеров
 cd /home/unitree/control_robot
-docker-compose down
-docker-compose up -d
+docker compose down
+docker compose up -d
 ```
 
 ### 3. Проблемы с правами доступа
@@ -152,7 +152,7 @@ sudo rm /etc/systemd/system/control_robot.service
 
 # Удаление контейнеров и образов
 cd /home/unitree/control_robot
-docker-compose down
+docker compose down
 docker rmi control_robot-frontend control_robot-backend
 
 # Удаление рабочей директории

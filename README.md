@@ -89,14 +89,14 @@ sudo rm /etc/systemd/system/control_robot.service
 4. Проверка статуса Docker контейнеров:
 ```bash
 docker ps
-docker-compose ps
+docker compose ps
 ```
 
 5. Перезапуск контейнеров:
 ```bash
 cd /home/unitree/control_robot
-docker-compose down
-docker-compose up -d
+docker compose down
+docker compose up -d
 ```
 
 ## Структура проекта

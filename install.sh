@@ -25,7 +25,7 @@ if ! command -v docker &> /dev/null; then
 fi
 
 # Проверка наличия Docker Compose
-if ! command -v docker-compose &> /dev/null; then
+if ! command -v docker compose &> /dev/null; then
     info "Установка Docker Compose..."
     curl -L "https://github.com/docker/compose/releases/download/v2.24.5/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
     chmod +x /usr/local/bin/docker-compose || error "Не удалось установить Docker Compose"
@@ -95,7 +95,7 @@ fi
 # Запуск Docker контейнеров
 info "Запуск Docker контейнеров..."
 cd "$WORK_DIR" || error "Не удалось перейти в рабочую директорию"
-docker-compose up -d || error "Не удалось запустить контейнеры"
+docker compose up -d || error "Не удалось запустить контейнеры"
 
 # Проверка статуса
 if systemctl is-active --quiet control_robot.service; then
