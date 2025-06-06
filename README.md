@@ -1,6 +1,6 @@
 # H1 Motion Creator
 
-Веб-интерфейс для создания и редактирования файлов движений робота H1.
+Веб-интерфейс для создания и редактирования файлов движений робота H1 с использованием Docker.
 
 ## Функциональность
 
@@ -8,47 +8,57 @@
 - Блочный редактор кода для создания последовательности движений
 - Сохранение файлов движений в формате .cpp
 - Поддержка всех стандартных движений из шаблона
+- Контейнеризация с помощью Docker для простой установки и запуска
 
 ## Требования
 
-- Node.js 16+ и npm
-- Python 3.8+
-- MuJoCo (для 3D визуализации)
+- Ubuntu 20.04 или новее
+- Docker и Docker Compose
+- Доступ к камере (опционально)
 
 ## Установка
 
-### Фронтенд
-
+1. Клонируйте репозиторий:
 ```bash
-cd frontend
-npm install
+git clone https://github.com/BeGosha-git/control_robot.git
+cd control_robot
 ```
 
-### Бэкенд
-
+2. Запустите скрипт установки:
 ```bash
-cd backend
-python -m venv venv
-source venv/bin/activate  # для Linux/Mac
-venv\Scripts\activate     # для Windows
-pip install -r requirements.txt
+sudo ./install.sh
+```
+
+3. Перезагрузите систему:
+```bash
+sudo reboot
 ```
 
 ## Запуск
 
-1. Запустите бэкенд:
+После установки и перезагрузки запустите приложение:
 ```bash
-cd backend
-python app.py
+sudo ./start_h1.sh
 ```
 
-2. В отдельном терминале запустите фронтенд:
+Приложение будет доступно по адресам:
+- Frontend: http://localhost
+- Backend API: http://localhost:3001
+
+## Установка как системный сервис
+
+Для автоматического запуска при старте системы:
 ```bash
-cd frontend
-npm start
+sudo ./install_service.sh
 ```
 
-3. Откройте браузер и перейдите по адресу http://localhost:3000
+Управление сервисом:
+```bash
+sudo systemctl start h1-docker    # запуск
+sudo systemctl stop h1-docker     # остановка
+sudo systemctl status h1-docker   # статус
+sudo systemctl disable h1-docker  # отключение автозапуска
+```
 
 ## Использование
 
@@ -65,21 +75,67 @@ npm start
      - Код движения
    - Используйте кнопку "Сохранить" для сохранения файла
 
-3. Сохраненные файлы движений будут находиться в директории `backend/motions/`
+3. Сохраненные файлы движений будут находиться в директории `/home/unitree/control_robot/backend/motions/`
 
 ## Структура проекта
 
 ```
 .
 ├── frontend/              # React приложение
-│   ├── src/
-│   │   ├── components/    # React компоненты
-│   │   └── pages/        # Страницы приложения
-│   └── package.json
-├── backend/              # FastAPI сервер
-│   ├── app.py           # Основной файл сервера
-│   └── requirements.txt  # Python зависимости
+│   ├── src/              # Исходный код
+│   ├── Dockerfile        # Конфигурация Docker для фронтенда
+│   └── nginx.conf        # Конфигурация Nginx
+├── backend/              # Node.js сервер
+│   ├── src/             # Исходный код
+│   ├── Dockerfile       # Конфигурация Docker для бэкенда
+│   └── package.json     # Зависимости Node.js
+├── docker-compose.yml    # Конфигурация Docker Compose
+├── install.sh           # Скрипт установки
+├── start_h1.sh         # Скрипт запуска
+├── install_service.sh   # Скрипт установки системного сервиса
 └── README.md
+```
+
+## Разработка
+
+### Локальная разработка без Docker
+
+1. Запустите бэкенд:
+```bash
+cd backend
+npm install
+npm start
+```
+
+2. В отдельном терминале запустите фронтенд:
+```bash
+cd frontend
+npm install
+npm start
+```
+
+### Разработка с Docker
+
+1. Сборка и запуск контейнеров:
+```bash
+docker-compose up --build
+```
+
+2. Просмотр логов:
+```bash
+docker-compose logs -f
+```
+
+3. Остановка контейнеров:
+```bash
+docker-compose down
+```
+
+## Сетевая настройка
+
+Для работы с роботом может потребоваться настройка маршрутизации:
+```bash
+sudo ip route add default via 192.168.123.1
 ```
 
 ## Лицензия
@@ -88,7 +144,7 @@ MIT
 
 ---
 
-**Проект поддерживает кроссплатформенную работу (Windows, Linux).** 
+**Проект поддерживает кроссплатформенную работу (Windows, Linux) через Docker.**
 
 
 
