@@ -1140,14 +1140,13 @@ app.post('/api/execute', async (req, res) => {
   lastInterrupt = false;
   processStartTime = Date.now();
 
-  // Используем spawn для прямого выполнения команды на хост-машине
-  const proc = spawn('/bin/bash', ['-c', command], {
+  // Формируем команду для выполнения на хост-машине
+  const hostCommand = `docker exec h1_site-backend-1 ${command}`;
+  
+  // Используем spawn для выполнения команды на хост-машине
+  const proc = spawn('docker', ['exec', 'h1_site-backend-1', '/bin/bash', '-c', command], {
     windowsHide: true,
-    detached: true,
-    env: {
-      ...process.env,
-      PATH: process.env.PATH
-    }
+    detached: true
   });
 
   currentProcess = proc;
@@ -1232,31 +1231,47 @@ app.post('/api/execute', async (req, res) => {
 app.post('/api/interrupt', async (req, res) => {
   if (isProcessing && currentProcessPid) {
     try {
-      // Отправляем SIGTERM процессу
-      process.kill(currentProcessPid, 'SIGTERM');
-      
-      // Даем процессу время на корректное завершение
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      
-      // Проверяем, завершился ли процесс
-      const isRunning = await processUtils.isProcessRunning(currentProcessPid);
-      
-      if (isRunning) {
-        // Если процесс все еще работает, отправляем SIGKILL
-        process.kill(currentProcessPid, 'SIGKILL');
-      }
+      // Используем docker exec для отправки сигнала процессу внутри контейнера
+      const killCommand = `docker exec h1_site-backend-1 kill -15 ${currentProcessPid}`;
+      const proc = spawn('docker', ['exec', 'h1_site-backend-1', 'kill', '-15', currentProcessPid.toString()], {
+        windowsHide: true
+      });
 
-      isProcessing = false;
-      currentProcess = null;
-      currentProcessPid = null;
-      currentCommand = null;
-      lastInterrupt = true;
-      
-      console.log(`[${new Date().toLocaleTimeString()}] Команда прервана пользователем`);
-      return res.json({ 
-        success: true, 
-        message: isRunning ? 'Команда принудительно прервана' : 'Команда прервана',
-        platform: process.platform
+      proc.on('close', async (code) => {
+        if (code !== 0) {
+          // Если не удалось отправить SIGTERM, пробуем SIGKILL
+          const forceKillProc = spawn('docker', ['exec', 'h1_site-backend-1', 'kill', '-9', currentProcessPid.toString()], {
+            windowsHide: true
+          });
+          
+          forceKillProc.on('close', () => {
+            isProcessing = false;
+            currentProcess = null;
+            currentProcessPid = null;
+            currentCommand = null;
+            lastInterrupt = true;
+            
+            console.log(`[${new Date().toLocaleTimeString()}] Команда принудительно прервана`);
+            return res.json({ 
+              success: true, 
+              message: 'Команда принудительно прервана',
+              platform: process.platform
+            });
+          });
+        } else {
+          isProcessing = false;
+          currentProcess = null;
+          currentProcessPid = null;
+          currentCommand = null;
+          lastInterrupt = true;
+          
+          console.log(`[${new Date().toLocaleTimeString()}] Команда прервана пользователем`);
+          return res.json({ 
+            success: true, 
+            message: 'Команда прервана',
+            platform: process.platform
+          });
+        }
       });
     } catch (error) {
       console.error(`[${new Date().toLocaleTimeString()}] Ошибка при прерывании команды:`, error);

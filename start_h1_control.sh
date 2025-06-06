@@ -97,37 +97,90 @@ update_repository() {
     fi
 }
 
-# Определяем рабочую директорию
-WORK_DIR="/home/unitree/control_robot"
-CURRENT_DIR=$(pwd)
+start_docker_containers() {
+    info "Запуск Docker контейнеров..."
+    
+    # Проверяем, запущены ли уже контейнеры
+    if docker compose ps | grep -q "Up"; then
+        info "Контейнеры уже запущены"
+        return 0
+    fi
+    
+    # Запускаем контейнеры
+    if ! docker compose up -d; then
+        error "Не удалось запустить Docker контейнеры"
+        return 1
+    fi
+    
+    # Ждем, пока контейнеры полностью запустятся
+    info "Ожидание запуска контейнеров..."
+    sleep 10
+    
+    # Проверяем статус контейнеров
+    if ! docker compose ps | grep -q "Up"; then
+        error "Контейнеры не запустились"
+        return 1
+    fi
+    
+    info "Docker контейнеры успешно запущены"
+    return 0
+}
 
-# Если мы не в рабочей директории, копируем файлы
-if [ "$CURRENT_DIR" != "$WORK_DIR" ]; then
-    info "Установка в рабочую директорию..."
+build_and_install_sdk() {
+    info "Сборка и установка SDK..."
     
-    # Создаем рабочую директорию если её нет
-    mkdir -p "$WORK_DIR" || error "Не удалось создать рабочую директорию"
+    # Проверяем, что контейнер backend запущен
+    if ! docker compose ps | grep -q "h1_site-backend-1.*Up"; then
+        error "Контейнер backend не запущен"
+        return 1
+    fi
     
-    # Копируем файлы
-    cp -r ./* "$WORK_DIR/" || error "Не удалось скопировать файлы"
-    cp -r ./.* "$WORK_DIR/" 2>/dev/null || true
+    # Выполняем команды в контейнере backend
+    if ! docker compose exec -T backend bash -c "cd /home/unitree/unitree_sdk2-main && cd build && cmake .. && make"; then
+        error "Ошибка сборки SDK"
+        return 1
+    fi
     
-    # Переходим в рабочую директорию
-    cd "$WORK_DIR" || error "Не удалось перейти в рабочую директорию"
+    info "SDK успешно собран и установлен"
+    return 0
+}
+
+main() {
+    log "=== Начало выполнения скрипта ==="
+    log "Текущая директория: $(pwd)"
+    log "Пользователь: $(whoami)"
+    log "Группы: $(groups)"
+    
+    # Проверяем наличие необходимых команд
+    check_required_commands
     
     # Обновляем репозиторий
     update_repository
-else
-    info "Установка в текущей директории..."
-    update_repository
-fi
-
-# Проверка и установка системного сервиса
-if [ -f "control_robot.service" ]; then
+    
+    # Обновляем сервис
     update_service
-else
-    warn "Файл control_robot.service не найден, пропускаем установку сервиса"
-fi
+    
+    # Запускаем Docker контейнеры
+    if ! start_docker_containers; then
+        error "Не удалось запустить Docker контейнеры"
+        exit 1
+    fi
+    
+    # Собираем и устанавливаем SDK
+    if ! build_and_install_sdk; then
+        error "Не удалось собрать и установить SDK"
+        exit 1
+    fi
+    
+    # Запускаем сервис
+    if ! run_as_root systemctl restart control_robot; then
+        error "Не удалось запустить сервис control_robot"
+        exit 1
+    fi
+    
+    info "Установка и настройка завершены успешно"
+    log "=== Завершение выполнения скрипта ==="
+}
 
 # Проверка доступа к камере
 info "Проверка доступа к камере..."
@@ -151,4 +204,6 @@ if systemctl is-active --quiet control_robot.service; then
     echo "Остановка:  systemctl stop control_robot"
 else
     warn "Сервис не запущен. Проверьте логи: journalctl -u control_robot -f"
-fi 
+fi
+
+main 
