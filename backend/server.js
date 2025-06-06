@@ -32,23 +32,24 @@ const ITEM_TYPES = {
   DIRECTORY: 'directory'
 };
 
-// Изменяем путь к конфигурационному файлу
+// Меняем путь к конфигурационному файлу на путь вне контейнера
 const CONFIG_PATH = process.platform === 'win32'
-  ? path.join(process.cwd(), 'configs.conf')
+  ? path.join(process.cwd(), 'backend', 'configs.conf')
   : '/home/unitree/configs.conf';
+
 const DEFAULT_CONFIG = {
   robotButtons: [
     {
       id: 1,
       tag: 'build',
       name: 'Забилдить',
-      command: 'sudo -s "cd /home/unitree/unitree_sdk2-main && cd build && cmake .. && make"'
+      command: 'cd /home/unitree/unitree_sdk2-main && cd build && cmake .. && make'
     },
     {
       id: 2,
       tag: 'reset',
       name: 'Сброс',
-      command: 'sudo -s "/home/unitree/unitree_sdk2-main/build/bin/H1_RESET_POSITION eth0"'
+      command: '/home/unitree/unitree_sdk2-main/build/bin/H1_RESET_POSITION eth0'
     }
   ],
   rootPath: '/home/unitree',
@@ -1147,12 +1148,15 @@ app.post('/api/execute', async (req, res) => {
   const shell = process.platform === 'win32' ? 'cmd.exe' : '/bin/bash';
   // Добавляем sudo для выполнения команд на хост-системе
   const fullCommand = process.platform === 'win32' 
-    ? command 
-    : `sudo -s "${command}"`;
+    ? `cmd.exe /c "${command}"` 
+    : `sudo /bin/bash -c "${command}"`;
 
   // Используем spawn вместо exec для лучшего контроля над процессом
-  const proc = spawn(shell, process.platform === 'win32' ? ['/c', fullCommand] : ['-c', fullCommand], {
-    stdio: ['pipe', 'pipe', 'pipe']
+  const proc = spawn(shell, process.platform === 'win32' 
+    ? ['/c', command] 
+    : ['-c', `sudo ${command}`], {
+    windowsHide: true,
+    detached: process.platform !== 'win32' // На Linux создаем новую группу процессов
   });
 
     currentProcess = proc;
@@ -1321,18 +1325,6 @@ app.post('/api/config', async (req, res) => {
       return res.status(400).json({ error: 'Отсутствуют обязательные поля: RobotName, rootPath, sdkPath' });
     }
 
-    // Проверяем права доступа к директории конфигурации
-    const configDir = path.dirname(CONFIG_PATH);
-    try {
-      await fs.access(configDir, fs.constants.R_OK | fs.constants.W_OK);
-    } catch (error) {
-      console.error(`[${new Date().toLocaleTimeString()}] Ошибка доступа к директории конфигурации:`, error);
-      return res.status(500).json({ 
-        error: 'Ошибка доступа к директории конфигурации',
-        details: 'Нет прав на запись в директорию конфигурации'
-      });
-    }
-
     // Проверяем CMakeLists.txt при сохранении конфига
     try {
       const cmakePath = path.join(config.sdkPath, 'example', 'h1', 'CMakeLists.txt');
@@ -1345,15 +1337,38 @@ app.post('/api/config', async (req, res) => {
       });
     }
 
-    // Сохраняем конфигурацию
+    // Сохраняем конфиг через sudo
+    const configContent = JSON.stringify(config, null, 2);
+    const tempPath = path.join('/tmp', `config_${Date.now()}.json`);
+    
     try {
-      await fs.writeFile(CONFIG_PATH, JSON.stringify(config, null, 2), 'utf8');
+      // Сначала записываем во временный файл
+      await fs.writeFile(tempPath, configContent, 'utf8');
+      
+      // Затем перемещаем через sudo
+      const { exec } = require('child_process');
+      await new Promise((resolve, reject) => {
+        exec(`sudo mv ${tempPath} ${CONFIG_PATH}`, (error) => {
+          if (error) {
+            reject(error);
+          } else {
+            resolve();
+          }
+        });
+      });
+      
       res.json({ success: true });
-    } catch (writeError) {
-      console.error(`[${new Date().toLocaleTimeString()}] Ошибка при записи конфигурации:`, writeError);
-      return res.status(500).json({ 
-        error: 'Ошибка при записи конфигурации',
-        details: writeError.message
+    } catch (error) {
+      console.error(`[${new Date().toLocaleTimeString()}] Ошибка при сохранении конфига:`, error);
+      // Пробуем удалить временный файл в случае ошибки
+      try {
+        await fs.unlink(tempPath);
+      } catch (unlinkError) {
+        console.error('Ошибка при удалении временного файла:', unlinkError);
+      }
+      res.status(500).json({ 
+        error: 'Ошибка при сохранении конфигурации',
+        details: error.message
       });
     }
   } catch (error) {
@@ -1721,7 +1736,7 @@ async function findFilesWithUpdateJointPositions(sdkPath) {
     });
     return [];
   }
-}
+    }
 
 // Добавляем новый эндпоинт для получения списка файлов с updateJointPositions
 app.get('/api/motion/valid-files', async (req, res) => {

@@ -21,6 +21,7 @@ services:
       - "3001:3001"
     volumes:
       - /home/unitree:/home/unitree:rw
+      - ./backend/configs.conf:/home/unitree/configs.conf:rw
       - /dev:/dev:ro
     environment:
       - NODE_ENV=production
