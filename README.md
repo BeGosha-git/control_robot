@@ -27,6 +27,9 @@ cd control_robot
 
 2. Запустите скрипт установки:
 ```bash
+chmod +x install.sh
+chmod +x start_h1.sh
+chmod +x install_service.sh
 sudo ./install.sh
 ```
 
@@ -102,7 +105,7 @@ sudo journalctl -u control_robot -f   # просмотр логов
 │   ├── src/             # Исходный код
 │   ├── Dockerfile       # Конфигурация Docker для бэкенда
 │   └── package.json     # Зависимости Node.js
-├── docker-compose.yml    # Конфигурация Docker Compose
+├── docker compose.yml    # Конфигурация Docker Compose
 ├── install.sh           # Скрипт установки
 ├── start_h1.sh         # Скрипт запуска
 ├── install_service.sh   # Скрипт установки системного сервиса
@@ -131,17 +134,17 @@ npm start
 
 1. Сборка и запуск контейнеров:
 ```bash
-docker-compose up --build
+docker compose up --build
 ```
 
 2. Просмотр логов:
 ```bash
-docker-compose logs -f
+docker compose logs -f
 ```
 
 3. Остановка контейнеров:
 ```bash
-docker-compose down
+docker compose down
 ```
 
 ## Сетевая настройка

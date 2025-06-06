@@ -27,7 +27,7 @@ if ! command -v docker &> /dev/null; then
 fi
 
 # Проверка наличия Docker Compose
-if ! command -v docker-compose &> /dev/null; then
+if ! command -v docker compose &> /dev/null; then
     error "Docker Compose не установлен. Пожалуйста, установите Docker Compose перед запуском."
 fi
 
@@ -55,7 +55,7 @@ fi
 
 # Остановка существующих контейнеров
 log "Остановка существующих контейнеров..."
-docker-compose down
+docker compose down
 
 # Очистка неиспользуемых образов и контейнеров
 log "Очистка неиспользуемых Docker ресурсов..."
@@ -63,7 +63,7 @@ docker system prune -f
 
 # Сборка и запуск контейнеров
 log "Сборка и запуск контейнеров..."
-if docker-compose up -d; then
+if docker compose up -d; then
     log "Контейнеры успешно запущены"
 else
     error "Ошибка при запуске контейнеров"
@@ -73,17 +73,17 @@ fi
 log "Проверка статуса контейнеров..."
 sleep 5 # Даем время на запуск
 
-if docker-compose ps | grep -q "Up"; then
+if docker compose ps | grep -q "Up"; then
     log "Все контейнеры запущены успешно"
     echo -e "\n${GREEN}Приложение доступно по адресам:${NC}"
     echo "Frontend: http://localhost"
     echo "Backend API: http://localhost/api"
     echo -e "\n${YELLOW}Для просмотра логов используйте:${NC}"
-    echo "docker-compose logs -f"
+    echo "docker compose logs -f"
     echo -e "\n${YELLOW}Для остановки приложения используйте:${NC}"
-    echo "docker-compose down"
+    echo "docker compose down"
 else
-    error "Не все контейнеры запущены. Проверьте логи: docker-compose logs"
+    error "Не все контейнеры запущены. Проверьте логи: docker compose logs"
 fi
 
 # Проверка доступности сервисов
