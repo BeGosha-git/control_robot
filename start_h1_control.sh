@@ -45,6 +45,10 @@ update_repository() {
 update_service() {
     info "Проверка системного сервиса..."
     
+    # Устанавливаем права на выполнение для скрипта
+    chmod +x "$(pwd)/start_h1_control.sh" || error "Не удалось установить права на выполнение для start_h1_control.sh"
+    chown unitree:docker "$(pwd)/start_h1_control.sh" || error "Не удалось установить владельца для start_h1_control.sh"
+    
     # Проверяем, существует ли файл сервиса
     if [ -f "/etc/systemd/system/control_robot.service" ]; then
         # Сравниваем текущий файл сервиса с новым
