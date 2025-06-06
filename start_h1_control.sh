@@ -10,77 +10,43 @@ info() { log "INFO: $1"; }
 warn() { log "WARN: $1"; }
 error() { log "ERROR: $1"; }
 
-# Функция для установки Node.js
+# Функция для установки Node.js через nvm
 install_nodejs() {
-    info "Проверка и установка Node.js..."
+    info "Проверка и установка Node.js через nvm..."
     
-    # Проверяем наличие Node.js
-    if command -v node &> /dev/null; then
-        node_version=$(node --version)
-        info "Node.js $node_version уже установлен"
-        
-        # Проверяем наличие npm
-        if ! command -v npm &> /dev/null; then
-            info "npm не найден, устанавливаем..."
-            if ! sudo apt-get update; then
-                error "Не удалось обновить списки пакетов"
-                return 1
-            fi
-            
-            if ! sudo apt-get install -y npm; then
-                error "Не удалось установить npm"
-                return 1
-            fi
+    # Проверяем наличие nvm
+    if [ ! -d "$HOME/.nvm" ]; then
+        info "Установка nvm..."
+        # Устанавливаем nvm
+        if ! curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash; then
+            error "Не удалось установить nvm"
+            return 1
         fi
         
-        npm_version=$(npm --version)
-        info "npm $npm_version успешно установлен"
-        
-        # Проверяем версию Node.js
-        if [[ "${node_version#v}" < "14.0.0" ]]; then
-            info "Требуется обновление Node.js до более новой версии..."
-            
-            # Удаляем старую версию
-            if ! sudo apt-get remove -y nodejs npm; then
-                error "Не удалось удалить старую версию Node.js"
-                return 1
-            fi
-            
-            # Очищаем остатки
-            sudo apt-get autoremove -y
-            
-            # Добавляем репозиторий NodeSource
-            if ! curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -; then
-                error "Не удалось добавить репозиторий Node.js"
-                return 1
-            fi
-            
-            # Устанавливаем новую версию
-            if ! sudo apt-get install -y nodejs; then
-                error "Не удалось установить Node.js"
-                return 1
-            fi
-            
-            # Проверяем установку
-            node_version=$(node --version)
-            npm_version=$(npm --version)
-            info "Node.js обновлен до версии $node_version, npm $npm_version"
-        fi
-        
-        return 0
+        # Загружаем nvm в текущую сессию
+        export NVM_DIR="$HOME/.nvm"
+        [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+    else
+        # Загружаем nvm если он уже установлен
+        export NVM_DIR="$HOME/.nvm"
+        [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
     fi
     
-    # Если Node.js не установлен, устанавливаем полностью
-    info "Установка Node.js..."
-    if ! curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -; then
-        error "Не удалось добавить репозиторий Node.js"
+    # Проверяем, что nvm доступен
+    if ! command -v nvm &> /dev/null; then
+        error "nvm не найден после установки"
         return 1
     fi
     
-    if ! sudo apt-get install -y nodejs; then
-        error "Не удалось установить Node.js"
+    # Устанавливаем Node.js 18.x
+    info "Установка Node.js 18.x через nvm..."
+    if ! nvm install 18; then
+        error "Не удалось установить Node.js через nvm"
         return 1
     fi
+    
+    # Используем установленную версию
+    nvm use 18
     
     # Проверяем установку
     if ! command -v node &> /dev/null || ! command -v npm &> /dev/null; then
@@ -91,7 +57,22 @@ install_nodejs() {
     node_version=$(node --version)
     npm_version=$(npm --version)
     info "Node.js $node_version и npm $npm_version успешно установлены"
+    
+    # Добавляем nvm в .bashrc если его там нет
+    if ! grep -q "NVM_DIR" "$HOME/.bashrc"; then
+        echo 'export NVM_DIR="$HOME/.nvm"' >> "$HOME/.bashrc"
+        echo '[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"' >> "$HOME/.bashrc"
+        echo '[ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"' >> "$HOME/.bashrc"
+    fi
+    
     return 0
+}
+
+# Функция для загрузки nvm в текущую сессию
+load_nvm() {
+    export NVM_DIR="$HOME/.nvm"
+    [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+    [ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"
 }
 
 # Функция для установки зависимостей бэкенда
@@ -281,6 +262,9 @@ main() {
     info "Текущая директория: $(pwd)"
     info "Пользователь: $(whoami)"
     info "Группы пользователя: $(groups)"
+    
+    # Загружаем nvm
+    load_nvm
     
     # Устанавливаем Node.js
     if ! install_nodejs; then
