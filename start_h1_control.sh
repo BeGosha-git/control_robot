@@ -2,153 +2,276 @@
 
 # Функция для логирования
 log() {
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" >> /home/unitree/control_robot.log
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a /home/unitree/control_robot.log
 }
 
-# Функция для вывода информационных сообщений
-info() {
-    echo "[INFO] $1"
-    log "[INFO] $1"
-}
+# Функции для разных уровней логирования
+info() { log "INFO: $1"; }
+warn() { log "WARN: $1"; }
+error() { log "ERROR: $1"; }
 
-# Функция для вывода предупреждений
-warn() {
-    echo "[WARN] $1" >&2
-    log "[WARN] $1"
-}
-
-# Функция для вывода ошибок
-error() {
-    echo "[ERROR] $1" >&2
-    log "[ERROR] $1"
-    exit 1
-}
-
-# Начинаем выполнение скрипта
-log "=== Начало выполнения скрипта ==="
-log "Текущая директория: $(pwd)"
-log "Пользователь: $(whoami)"
-log "Группы: $(groups)"
-
-# Проверка наличия необходимых команд
-log "Проверка наличия необходимых команд..."
-for cmd in docker systemctl git; do
-    if ! command -v $cmd &> /dev/null; then
-        error "Команда $cmd не найдена"
-    fi
-    log "Команда $cmd найдена: $(which $cmd)"
-done
-
-# Функция для проверки и обновления сервиса
-update_service() {
-    info "Проверка системного сервиса..."
+# Функция для установки Node.js
+install_nodejs() {
+    info "Проверка и установка Node.js..."
     
-    # Проверяем, существует ли файл сервиса
-    if [ -f "/etc/systemd/system/control_robot.service" ]; then
-        # Сравниваем текущий файл сервиса с новым
-        if ! cmp -s "control_robot.service" "/etc/systemd/system/control_robot.service"; then
-            info "Обнаружена новая версия сервиса, обновляем..."
-            # Останавливаем и отключаем старый сервис
-            systemctl stop control_robot 2>/dev/null || true
-            systemctl disable control_robot 2>/dev/null || true
-            # Удаляем старый файл сервиса
-            rm -f /etc/systemd/system/control_robot.service || true
-            # Копируем новый файл сервиса
-            cp control_robot.service /etc/systemd/system/ || error "Не удалось скопировать файл сервиса"
-            chmod 644 /etc/systemd/system/control_robot.service || error "Не удалось установить права на файл сервиса"
-            # Перезагружаем systemd и запускаем сервис
-            systemctl daemon-reload || error "Не удалось перезагрузить systemd"
-            systemctl enable control_robot.service || error "Не удалось включить сервис"
-            systemctl start control_robot.service || error "Не удалось запустить сервис"
-            info "Сервис успешно обновлен"
-        else
-            info "Сервис актуален"
-        fi
-    else
-        info "Установка нового сервиса..."
-        cp control_robot.service /etc/systemd/system/ || error "Не удалось скопировать файл сервиса"
-        chmod 644 /etc/systemd/system/control_robot.service || error "Не удалось установить права на файл сервиса"
-        systemctl daemon-reload || error "Не удалось перезагрузить systemd"
-        systemctl enable control_robot.service || error "Не удалось включить сервис"
-        systemctl start control_robot.service || error "Не удалось запустить сервис"
-        info "Сервис успешно установлен"
+    # Проверяем наличие Node.js
+    if command -v node &> /dev/null && command -v npm &> /dev/null; then
+        node_version=$(node --version)
+        npm_version=$(npm --version)
+        info "Node.js $node_version и npm $npm_version уже установлены"
+        return 0
     fi
+    
+    # Устанавливаем Node.js
+    info "Установка Node.js..."
+    if ! curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -; then
+        error "Не удалось добавить репозиторий Node.js"
+        return 1
+    fi
+    
+    if ! sudo apt-get install -y nodejs; then
+        error "Не удалось установить Node.js"
+        return 1
+    fi
+    
+    # Проверяем установку
+    if ! command -v node &> /dev/null || ! command -v npm &> /dev/null; then
+        error "Node.js не установлен корректно"
+        return 1
+    fi
+    
+    node_version=$(node --version)
+    npm_version=$(npm --version)
+    info "Node.js $node_version и npm $npm_version успешно установлены"
+    return 0
 }
 
-# Функция для обновления репозитория
+# Функция для установки зависимостей бэкенда
+install_backend_deps() {
+    info "Установка зависимостей бэкенда..."
+    
+    if [ ! -d "backend" ]; then
+        error "Директория backend не найдена"
+        return 1
+    fi
+    
+    cd backend || return 1
+    
+    # Устанавливаем зависимости
+    if ! npm install; then
+        error "Не удалось установить зависимости бэкенда"
+        return 1
+    fi
+    
+    cd ..
+    info "Зависимости бэкенда успешно установлены"
+    return 0
+}
+
+# Функция для запуска бэкенда
+start_backend() {
+    info "Запуск бэкенда..."
+    
+    if [ ! -d "backend" ]; then
+        error "Директория backend не найдена"
+        return 1
+    fi
+    
+    cd backend || return 1
+    
+    # Проверяем, не запущен ли уже бэкенд
+    if pgrep -f "node.*server.js" > /dev/null; then
+        info "Бэкенд уже запущен"
+        return 0
+    fi
+    
+    # Запускаем бэкенд в фоновом режиме
+    nohup node src/server.js > backend.log 2>&1 &
+    
+    # Проверяем, запустился ли процесс
+    sleep 2
+    if ! pgrep -f "node.*server.js" > /dev/null; then
+        error "Не удалось запустить бэкенд"
+        return 1
+    fi
+    
+    cd ..
+    info "Бэкенд успешно запущен"
+    return 0
+}
+
+# Функция для остановки бэкенда
+stop_backend() {
+    info "Остановка бэкенда..."
+    
+    if pgrep -f "node.*server.js" > /dev/null; then
+        pkill -f "node.*server.js"
+        sleep 2
+        if pgrep -f "node.*server.js" > /dev/null; then
+            error "Не удалось остановить бэкенд"
+            return 1
+        fi
+    fi
+    
+    info "Бэкенд остановлен"
+    return 0
+}
+
+# Функция для проверки и обновления репозитория
 update_repository() {
     info "Обновление репозитория..."
     
-    # Сохраняем configs.conf
-    if [ -f "backend/configs.conf" ]; then
-        info "Сохранение configs.conf..."
-        cp backend/configs.conf /tmp/configs.conf.backup || warn "Не удалось сохранить configs.conf"
+    # Проверяем, существует ли директория
+    if [ ! -d ".git" ]; then
+        error "Директория не является git репозиторием"
+        return 1
     fi
     
-    # Получаем последние изменения
-    git fetch origin || error "Не удалось получить изменения из репозитория"
-    git reset --hard origin/main || error "Не удалось обновить локальные файлы"
+    # Получаем текущую ветку
+    current_branch=$(git rev-parse --abbrev-ref HEAD)
+    info "Текущая ветка: $current_branch"
     
-    # Восстанавливаем configs.conf
-    if [ -f "/tmp/configs.conf.backup" ]; then
-        info "Восстановление configs.conf..."
-        cp /tmp/configs.conf.backup backend/configs.conf || warn "Не удалось восстановить configs.conf"
-        rm /tmp/configs.conf.backup
+    # Сохраняем локальные изменения
+    if ! git diff --quiet; then
+        warn "Обнаружены локальные изменения, сохраняем..."
+        git stash
     fi
-}
-
-# Определяем рабочую директорию
-WORK_DIR="/home/unitree/control_robot"
-CURRENT_DIR=$(pwd)
-
-# Если мы не в рабочей директории, копируем файлы
-if [ "$CURRENT_DIR" != "$WORK_DIR" ]; then
-    info "Установка в рабочую директорию..."
     
-    # Создаем рабочую директорию если её нет
-    mkdir -p "$WORK_DIR" || error "Не удалось создать рабочую директорию"
+    # Получаем изменения
+    if ! git fetch origin; then
+        error "Ошибка при получении изменений"
+        return 1
+    fi
     
-    # Копируем файлы
-    cp -r ./* "$WORK_DIR/" || error "Не удалось скопировать файлы"
-    cp -r ./.* "$WORK_DIR/" 2>/dev/null || true
+    # Проверяем, есть ли изменения
+    if [ "$(git rev-parse HEAD)" = "$(git rev-parse origin/$current_branch)" ]; then
+        info "Нет новых изменений"
+        return 0
+    fi
     
-    # Переходим в рабочую директорию
-    cd "$WORK_DIR" || error "Не удалось перейти в рабочую директорию"
+    # Останавливаем бэкенд перед обновлением
+    stop_backend
     
     # Обновляем репозиторий
-    update_repository
-else
-    info "Установка в текущей директории..."
-    update_repository
-fi
+    if ! git pull origin $current_branch; then
+        error "Ошибка при обновлении репозитория"
+        return 1
+    fi
+    
+    # Применяем сохраненные изменения, если они были
+    if git stash list | grep -q "stash@{0}"; then
+        info "Применяем сохраненные изменения..."
+        if ! git stash pop; then
+            warn "Не удалось применить сохраненные изменения"
+        fi
+    fi
+    
+    # Обновляем права на скрипт
+    chmod +x "$(pwd)/start_h1_control.sh"
+    chown unitree:docker "$(pwd)/start_h1_control.sh"
+    
+    info "Репозиторий успешно обновлен"
+    return 0
+}
 
-# Проверка и установка системного сервиса
-if [ -f "control_robot.service" ]; then
-    update_service
-else
-    warn "Файл control_robot.service не найден, пропускаем установку сервиса"
-fi
+# Функция для обновления сервиса
+update_service() {
+    info "Обновление сервиса..."
+    
+    # Проверяем наличие файла сервиса
+    if [ ! -f "control_robot.service" ]; then
+        error "Файл сервиса не найден"
+        return 1
+    fi
+    
+    # Проверяем, существует ли старый сервис
+    if systemctl list-unit-files | grep -q "control_robot.service"; then
+        info "Останавливаем старый сервис..."
+        systemctl stop control_robot
+        systemctl disable control_robot
+    fi
+    
+    # Копируем новый файл сервиса
+    info "Копируем новый файл сервиса..."
+    cp control_robot.service /etc/systemd/system/
+    
+    # Устанавливаем права
+    chmod 644 /etc/systemd/system/control_robot.service
+    
+    # Перезагружаем systemd
+    systemctl daemon-reload
+    
+    # Включаем и запускаем сервис
+    systemctl enable control_robot
+    systemctl start control_robot
+    
+    info "Сервис успешно обновлен"
+    return 0
+}
 
-# Проверка доступа к камере
-info "Проверка доступа к камере..."
-if [ -e "/dev/video0" ]; then
-    info "Камера найдена"
-else
-    warn "Камера не найдена. Проверьте подключение и права доступа."
-fi
+# Функция для запуска фронтенда в Docker
+start_frontend() {
+    info "Запуск фронтенда в Docker..."
+    
+    if ! docker compose ps | grep -q "frontend.*Up"; then
+        if ! docker compose up -d frontend; then
+            error "Не удалось запустить фронтенд"
+            return 1
+        fi
+    else
+        info "Фронтенд уже запущен"
+    fi
+    
+    info "Фронтенд успешно запущен"
+    return 0
+}
 
-# Проверка и запуск Docker контейнеров
-info "Запуск Docker контейнеров..."
-docker compose up --build -d || error "Не удалось запустить контейнеры"
+# Основной код
+main() {
+    # Начальное логирование
+    info "Запуск скрипта start_h1_control.sh"
+    info "Текущая директория: $(pwd)"
+    info "Пользователь: $(whoami)"
+    info "Группы пользователя: $(groups)"
+    
+    # Устанавливаем Node.js
+    if ! install_nodejs; then
+        error "Ошибка при установке Node.js"
+        exit 1
+    fi
+    
+    # Обновляем репозиторий
+    if ! update_repository; then
+        error "Ошибка при обновлении репозитория"
+        exit 1
+    fi
+    
+    # Устанавливаем зависимости бэкенда
+    if ! install_backend_deps; then
+        error "Ошибка при установке зависимостей бэкенда"
+        exit 1
+    fi
+    
+    # Обновляем сервис
+    if ! update_service; then
+        error "Ошибка при обновлении сервиса"
+        exit 1
+    fi
+    
+    # Запускаем бэкенд
+    if ! start_backend; then
+        error "Ошибка при запуске бэкенда"
+        exit 1
+    fi
+    
+    # Запускаем фронтенд
+    if ! start_frontend; then
+        error "Ошибка при запуске фронтенда"
+        exit 1
+    fi
+    
+    info "Все компоненты успешно запущены"
+}
 
-# Проверка статуса сервиса
-if systemctl is-active --quiet control_robot.service; then
-    info "Сервис успешно запущен"
-    echo "=== Управление сервисом ==="
-    echo "Статус:    systemctl status control_robot"
-    echo "Логи:      journalctl -u control_robot -f"
-    echo "Перезапуск: systemctl restart control_robot"
-    echo "Остановка:  systemctl stop control_robot"
-else
-    warn "Сервис не запущен. Проверьте логи: journalctl -u control_robot -f"
-fi 
+# Запускаем основной код
+main 

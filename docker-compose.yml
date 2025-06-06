@@ -6,37 +6,17 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
     ports:
-      - "80:80"
-    depends_on:
-      - backend
-    networks:
-      - app-network
-    restart: unless-stopped
-
-  backend:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-    ports:
-      - "3001:3001"
+      - "3000:3000"
     volumes:
-      - /home/unitree:/home/unitree:rw
-      - ./backend/configs.conf:/app/configs.conf:rw
-      - /dev:/dev:ro
-      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./frontend:/app
+      - /app/node_modules
     environment:
       - NODE_ENV=production
-      - PORT=3001
-      - ROOT_PATH=/home/unitree
-    privileged: true
-    cap_add:
-      - SYS_ADMIN
-    security_opt:
-      - apparmor:unconfined
+      - REACT_APP_BACKEND_URL=http://localhost:3001
     networks:
-      - app-network
+      - h1_network
     restart: unless-stopped
 
 networks:
-  app-network:
+  h1_network:
     driver: bridge 

@@ -1,9 +1,6 @@
 [Unit]
-Description=Control Robot Docker Service
-After=docker.service
-Requires=docker.service
-Wants=network-online.target
-After=network-online.target
+Description=H1 Control Robot Service
+After=network.target
 
 [Service]
 Type=simple
