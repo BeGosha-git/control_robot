@@ -205,58 +205,43 @@ stop_backend() {
     return 0
 }
 
-# Функция для проверки и обновления репозитория
+# Функция для обновления репозитория
 update_repository() {
     info "Обновление репозитория..."
     
-    # Проверяем, существует ли директория
+    # Проверяем наличие .git
     if [ ! -d ".git" ]; then
-        error "Директория не является git репозиторием"
+        error "Директория .git не найдена"
         return 1
     fi
     
-    # Получаем текущую ветку
-    current_branch=$(git rev-parse --abbrev-ref HEAD)
-    info "Текущая ветка: $current_branch"
-    
-    # Сохраняем локальные изменения
-    if ! git diff --quiet; then
-        warn "Обнаружены локальные изменения, сохраняем..."
-        git stash
+    # Сохраняем configs.conf если он существует
+    if [ -f "backend/configs.conf" ]; then
+        info "Сохраняем локальный configs.conf..."
+        cp backend/configs.conf /tmp/configs.conf.backup
     fi
     
-    # Получаем изменения
-    if ! git fetch origin; then
-        error "Ошибка при получении изменений"
+    # Сбрасываем все локальные изменения
+    info "Сброс локальных изменений..."
+    git reset --hard HEAD
+    git clean -fd
+    
+    # Получаем последние изменения
+    info "Получение последних изменений из репозитория..."
+    if ! git pull; then
+        error "Не удалось получить изменения из репозитория"
         return 1
     fi
     
-    # Проверяем, есть ли изменения
-    if [ "$(git rev-parse HEAD)" = "$(git rev-parse origin/$current_branch)" ]; then
-        info "Нет новых изменений"
-        return 0
+    # Восстанавливаем configs.conf если он был сохранен
+    if [ -f "/tmp/configs.conf.backup" ]; then
+        info "Восстанавливаем локальный configs.conf..."
+        cp /tmp/configs.conf.backup backend/configs.conf
+        rm /tmp/configs.conf.backup
     fi
     
-    # Останавливаем бэкенд перед обновлением
-    stop_backend
-    
-    # Обновляем репозиторий
-    if ! git pull origin $current_branch; then
-        error "Ошибка при обновлении репозитория"
-        return 1
-    fi
-    
-    # Применяем сохраненные изменения, если они были
-    if git stash list | grep -q "stash@{0}"; then
-        info "Применяем сохраненные изменения..."
-        if ! git stash pop; then
-            warn "Не удалось применить сохраненные изменения"
-        fi
-    fi
-    
-    # Обновляем права на скрипт
+    # Устанавливаем права на исполнение для скрипта
     chmod +x "$(pwd)/start_h1_control.sh"
-    chown unitree:docker "$(pwd)/start_h1_control.sh"
     
     info "Репозиторий успешно обновлен"
     return 0
