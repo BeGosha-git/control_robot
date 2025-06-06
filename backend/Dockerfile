@@ -4,31 +4,30 @@ FROM node:18
 # Устанавливаем sudo
 RUN apt-get update && apt-get install -y sudo && rm -rf /var/lib/apt/lists/*
 
-# Создаем рабочую директорию
-WORKDIR /app
-
-# Копируем package.json и package-lock.json
-COPY package*.json ./
-
-# Устанавливаем зависимости
-RUN npm install
-
 # Создаем пользователя unitree и добавляем его в группу sudo
 RUN useradd -m -s /bin/bash unitree && \
     echo "unitree ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/unitree && \
-    chmod 0440 /etc/sudoers.d/unitree && \
-    chown -R unitree:unitree /app
+    chmod 0440 /etc/sudoers.d/unitree
+
+# Создаем рабочую директорию и устанавливаем права
+WORKDIR /app
+RUN chown -R unitree:unitree /app
 
 # Переключаемся на пользователя unitree
 USER unitree
 
-# Копируем исходный код
-COPY server.js ./
-COPY configs.conf ./
+# Копируем файлы package.json и устанавливаем зависимости
+COPY --chown=unitree:unitree package*.json ./
+RUN npm install
 
-# Создаем директорию для файлов
+# Копируем остальные файлы
+COPY --chown=unitree:unitree server.js ./
+COPY --chown=unitree:unitree configs.conf ./
+
+# Создаем директорию для тестовых файлов с правильными правами
 RUN mkdir -p /app/test_files && \
-    chmod 777 /app/test_files
+    chown -R unitree:unitree /app/test_files && \
+    chmod 755 /app/test_files
 
 # Открываем порты
 EXPOSE 3001
