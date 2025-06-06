@@ -1,4 +1,4 @@
-# H1 Motion Creator
+# Control Robot
 
 Веб-интерфейс для создания и редактирования файлов движений робота H1 с использованием Docker.
 
@@ -14,7 +14,6 @@
 ## Требования
 
 - Ubuntu 20.04 или новее
-- Docker и Docker Compose
 - Доступ к камере (опционально)
 
 ## Установка
@@ -27,71 +26,78 @@ cd control_robot
 
 2. Запустите скрипт установки:
 ```bash
-chmod +x install.sh
-chmod +x start_h1.sh
-chmod +x install_service.sh
 sudo ./install.sh
 ```
 
-3. Перезагрузите систему:
-```bash
-sudo reboot
-```
-
-## Запуск
-
-После установки и перезагрузки запустите приложение:
-```bash
-sudo ./start_h1.sh
-```
+Скрипт автоматически:
+- Установит Docker и Docker Compose (если отсутствуют)
+- Настроит необходимые права доступа
+- Установит и запустит системный сервис
+- Запустит Docker контейнеры
+- Проверит доступ к камере
 
 Приложение будет доступно по адресам:
 - Frontend: http://localhost
 - Backend API: http://localhost:3001
 
-## Установка как системный сервис
+## Управление сервисом
 
-Для автоматического запуска при старте системы:
+Проверка статуса:
 ```bash
-sudo ./install_service.sh
+sudo systemctl status control_robot
 ```
 
-### Конфигурация сервиса
-
-Сервис `control_robot.service` настраивается со следующими параметрами:
-- Запуск после Docker и сети
-- Пользователь: unitree
-- Группа: docker
-- Рабочая директория: /home/unitree/control_robot
-- Автоматический перезапуск при сбоях
-- Логирование в /home/unitree/h1_docker.log
-- Расширенные права для работы с сетью и файловой системой
-
-Управление сервисом:
+Просмотр логов:
 ```bash
-sudo systemctl start control_robot    # запуск
-sudo systemctl stop control_robot     # остановка
-sudo systemctl status control_robot   # статус
-sudo systemctl disable control_robot  # отключение автозапуска
-sudo journalctl -u control_robot -f   # просмотр логов
+sudo journalctl -u control_robot -f
 ```
 
-## Использование
+Перезапуск сервиса:
+```bash
+sudo systemctl restart control_robot
+```
 
-1. В левой части экрана находится 3D модель робота H1:
-   - Используйте правую кнопку мыши для вращения модели
-   - Колесико мыши для масштабирования
-   - Среднюю кнопку мыши для перемещения
+Остановка сервиса:
+```bash
+sudo systemctl stop control_robot
+```
 
-2. В правой части экрана находится редактор движений:
-   - Нажмите "Добавить блок" для создания нового блока движения
-   - В каждом блоке можно указать:
-     - Название движения
-     - Длительность в миллисекундах
-     - Код движения
-   - Используйте кнопку "Сохранить" для сохранения файла
+Запуск сервиса:
+```bash
+sudo systemctl start control_robot
+```
 
-3. Сохраненные файлы движений будут находиться в директории `/home/unitree/control_robot/backend/motions/`
+## Устранение неполадок
+
+1. Проверка логов сервиса:
+```bash
+sudo journalctl -u control_robot -f
+```
+
+2. Перезапуск сервиса:
+```bash
+sudo systemctl restart control_robot
+```
+
+3. Остановка и отключение сервиса:
+```bash
+sudo systemctl stop control_robot
+sudo systemctl disable control_robot
+sudo rm /etc/systemd/system/control_robot.service
+```
+
+4. Проверка статуса Docker контейнеров:
+```bash
+docker ps
+docker-compose ps
+```
+
+5. Перезапуск контейнеров:
+```bash
+cd /home/unitree/control_robot
+docker-compose down
+docker-compose up -d
+```
 
 ## Структура проекта
 

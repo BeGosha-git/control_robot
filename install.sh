@@ -1,26 +1,114 @@
 #!/bin/bash
 
-# Проверка на root права
-if [ "$EUID" -ne 0 ]; then 
-    echo "Этот скрипт должен быть запущен с правами root (sudo)"
+# Функция для вывода сообщений об ошибках
+error() {
+    echo -e "\e[31mОшибка: $1\e[0m" >&2
     exit 1
+}
+
+# Функция для вывода информационных сообщений
+info() {
+    echo -e "\e[32m$1\e[0m"
+}
+
+# Проверка прав root
+if [ "$EUID" -ne 0 ]; then
+    error "Этот скрипт должен быть запущен с правами root (sudo)"
 fi
 
-# Добавление пользователя в группу docker
-usermod -aG docker $SUDO_USER
-
-# Установка прав на директорию unitree
-chown -R $SUDO_USER:$SUDO_USER /home/unitree
-chmod -R 777 /home/unitree
-
-# Настройка прав доступа к камере
-if [ -e /dev/video0 ]; then
-    chmod 666 /dev/video0
-    usermod -aG video $SUDO_USER
+# Проверка наличия Docker
+if ! command -v docker &> /dev/null; then
+    info "Установка Docker..."
+    curl -fsSL https://get.docker.com -o get-docker.sh
+    sh get-docker.sh || error "Не удалось установить Docker"
+    rm get-docker.sh
 fi
 
-# Перезапуск сервисов
-systemctl restart docker
+# Проверка наличия Docker Compose
+if ! command -v docker-compose &> /dev/null; then
+    info "Установка Docker Compose..."
+    curl -L "https://github.com/docker/compose/releases/download/v2.24.5/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+    chmod +x /usr/local/bin/docker-compose || error "Не удалось установить Docker Compose"
+fi
 
-echo "Установка завершена. Пожалуйста, перезагрузите систему для применения всех изменений."
-echo "После перезагрузки запустите ./start_h1.sh для старта приложения" 
+# Проверка наличия пользователя unitree
+if ! id "unitree" &>/dev/null; then
+    error "Пользователь unitree не существует"
+fi
+
+# Проверка наличия группы docker
+if ! getent group docker &>/dev/null; then
+    info "Создание группы docker..."
+    groupadd docker || error "Не удалось создать группу docker"
+fi
+
+# Проверка, что пользователь unitree входит в группу docker
+if ! groups unitree | grep -q docker; then
+    info "Добавление пользователя unitree в группу docker..."
+    usermod -aG docker unitree || error "Не удалось добавить пользователя в группу docker"
+fi
+
+# Проверка и создание рабочей директории
+WORK_DIR="/home/unitree/control_robot"
+if [ ! -d "$WORK_DIR" ]; then
+    info "Создание рабочей директории..."
+    mkdir -p "$WORK_DIR" || error "Не удалось создать рабочую директорию"
+fi
+
+# Копирование файлов в рабочую директорию
+info "Копирование файлов в рабочую директорию..."
+cp -r ./* "$WORK_DIR/" || error "Не удалось скопировать файлы"
+chown -R unitree:unitree "$WORK_DIR" || error "Не удалось изменить владельца файлов"
+
+# Установка прав на скрипты
+info "Установка прав на скрипты..."
+chmod +x "$WORK_DIR/start_h1.sh" || error "Не удалось установить права на start_h1.sh"
+chmod +x "$WORK_DIR/install.sh" || error "Не удалось установить права на install.sh"
+
+# Проверка и установка системного сервиса
+if [ -f "control_robot.service" ]; then
+    info "Установка системного сервиса..."
+    cp control_robot.service /etc/systemd/system/ || error "Не удалось скопировать файл сервиса"
+    chmod 644 /etc/systemd/system/control_robot.service || error "Не удалось установить права на файл сервиса"
+
+    # Создание и настройка лог-файла
+    info "Настройка лог-файла..."
+    touch /home/unitree/control_robot.log || error "Не удалось создать лог-файл"
+    chown unitree:unitree /home/unitree/control_robot.log || error "Не удалось изменить владельца лог-файла"
+    chmod 644 /home/unitree/control_robot.log || error "Не удалось установить права на лог-файл"
+
+    # Перезагрузка systemd и запуск сервиса
+    info "Настройка и запуск сервиса..."
+    systemctl daemon-reload || error "Не удалось перезагрузить systemd"
+    systemctl enable control_robot.service || error "Не удалось включить сервис"
+    systemctl start control_robot.service || error "Не удалось запустить сервис"
+fi
+
+# Проверка доступа к камере
+info "Проверка доступа к камере..."
+if [ -e "/dev/video0" ]; then
+    chmod 666 /dev/video0 || warn "Не удалось установить права на камеру"
+else
+    warn "Камера не найдена. Проверьте подключение и права доступа."
+fi
+
+# Запуск Docker контейнеров
+info "Запуск Docker контейнеров..."
+cd "$WORK_DIR" || error "Не удалось перейти в рабочую директорию"
+docker-compose up -d || error "Не удалось запустить контейнеры"
+
+# Проверка статуса
+if systemctl is-active --quiet control_robot.service; then
+    info "Установка успешно завершена!"
+    echo -e "\nУправление сервисом:"
+    echo "Статус:    sudo systemctl status control_robot"
+    echo "Логи:      sudo journalctl -u control_robot -f"
+    echo "Перезапуск: sudo systemctl restart control_robot"
+    echo "Остановка:  sudo systemctl stop control_robot"
+    
+    echo -e "\nПриложение доступно по адресам:"
+    echo "Frontend: http://localhost"
+    echo "Backend API: http://localhost:3001"
+else
+    warn "Сервис не запущен. Проверьте логи: sudo journalctl -u control_robot -f"
+fi 
