@@ -196,16 +196,12 @@ start_backend() {
 stop_backend() {
     info "Остановка бэкенда..."
     
-    if pgrep -f "node.*server.js" > /dev/null; then
-        pkill -f "node.*server.js"
-        sleep 2
-        if pgrep -f "node.*server.js" > /dev/null; then
-            error "Не удалось остановить бэкенд"
-            return 1
-        fi
+    # Проверяем и освобождаем порт 3001
+    if ! check_and_free_port 3001; then
+        warn "Не удалось корректно остановить бэкенд"
+        return 1
     fi
     
-    info "Бэкенд остановлен"
     return 0
 }
 
@@ -301,17 +297,39 @@ update_service() {
     return 0
 }
 
-# Функция для запуска фронтенда в Docker
+# Функция для запуска фронтенда
 start_frontend() {
-    info "Запуск фронтенда в Docker..."
+    info "Запуск фронтенда..."
     
+    # Проверяем наличие docker-compose.yml
+    if [ ! -f "docker-compose.yml" ]; then
+        error "Файл docker-compose.yml не найден"
+        return 1
+    fi
+    
+    # Проверяем наличие директории frontend
+    if [ ! -d "frontend" ]; then
+        error "Директория frontend не найдена"
+        return 1
+    fi
+    
+    # Проверяем, не запущены ли уже контейнеры
+    if docker compose ps | grep -q "frontend"; then
+        info "Останавливаем существующие контейнеры..."
+        docker compose down
+    fi
+    
+    # Запускаем контейнеры
+    info "Запуск Docker контейнеров..."
+    if ! docker compose up --build -d; then
+        error "Не удалось запустить Docker контейнеры"
+        return 1
+    fi
+    
+    # Проверяем, что контейнеры запущены
     if ! docker compose ps | grep -q "frontend.*Up"; then
-        if ! docker compose up -d frontend; then
-            error "Не удалось запустить фронтенд"
-            return 1
-        fi
-    else
-        info "Фронтенд уже запущен"
+        error "Контейнер frontend не запущен"
+        return 1
     fi
     
     info "Фронтенд успешно запущен"
@@ -326,7 +344,10 @@ main() {
     info "Пользователь: $(whoami)"
     info "Группы пользователя: $(groups)"
     
-    # Сначала обновляем репозиторий
+    # Останавливаем текущий бэкенд перед обновлением
+    stop_backend
+    
+    # Обновляем репозиторий
     if ! update_repository; then
         error "Ошибка при обновлении репозитория"
         exit 1
@@ -335,7 +356,7 @@ main() {
     # Загружаем nvm
     load_nvm
     
-    # Затем устанавливаем Node.js
+    # Устанавливаем Node.js
     if ! install_nodejs; then
         error "Ошибка при установке Node.js"
         exit 1

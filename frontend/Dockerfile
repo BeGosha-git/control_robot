@@ -1,5 +1,5 @@
 # Этап сборки
-FROM node:18-alpine as build
+FROM node:18-alpine as builder
 
 WORKDIR /app
 
@@ -18,8 +18,8 @@ RUN npm run build
 # Этап production
 FROM nginx:alpine
 
-# Копируем собранное приложение
-COPY --from=build /app/build /usr/share/nginx/html
+# Копируем собранное приложение из этапа сборки
+COPY --from=builder /app/build /usr/share/nginx/html
 
 # Копируем конфигурацию nginx
 COPY nginx.conf /etc/nginx/conf.d/default.conf

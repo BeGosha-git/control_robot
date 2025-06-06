@@ -2,7 +2,9 @@ version: '3.8'
 
 services:
   frontend:
-    image: nginx:latest
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
     ports:
       - "80:80"
     volumes:
