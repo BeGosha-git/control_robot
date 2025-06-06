@@ -39,16 +39,17 @@ const DEFAULT_CONFIG = {
       id: 1,
       tag: 'build',
       name: 'Забилдить',
-      command: 'cd /home/unitree/unitree_sdk2&&cd build&&cmake ..&&make'
+      command: 'cd /home/unitree/unitree_sdk2-main && cd build && cmake .. && make'
     },
     {
       id: 2,
       tag: 'reset',
       name: 'Сброс',
-      command: '/home/unitree/unitree_sdk2/build/bin/H1_RESET_POSITION eth0'
+      command: '/home/unitree/unitree_sdk2-main/build/bin/H1_RESET_POSITION eth0'
     }
   ],
-  rootPath: path.join(process.cwd(), 'tests_files'),
+  rootPath: '/home/unitree',
+  sdkPath: '/home/unitree/unitree_sdk2-main',
   RobotName: 'H-0000'
 };
 
@@ -1320,18 +1321,43 @@ app.post('/api/config', async (req, res) => {
       return res.status(400).json({ error: 'Отсутствуют обязательные поля: RobotName, rootPath, sdkPath' });
     }
 
+    // Проверяем права доступа к файлу конфигурации
+    try {
+      await fs.access(CONFIG_PATH, fs.constants.R_OK | fs.constants.W_OK);
+    } catch (error) {
+      console.error(`[${new Date().toLocaleTimeString()}] Ошибка доступа к конфигурационному файлу:`, error);
+      // Пробуем установить права доступа
+      try {
+        await fs.chmod(CONFIG_PATH, 0o666);
+      } catch (chmodError) {
+        console.error(`[${new Date().toLocaleTimeString()}] Не удалось установить права доступа:`, chmodError);
+        return res.status(500).json({ 
+          error: 'Ошибка доступа к конфигурационному файлу',
+          details: 'Нет прав на запись в файл конфигурации'
+        });
+      }
+    }
+
     // Проверяем CMakeLists.txt при сохранении конфига
     try {
-      await cleanupCMakeLists(config.sdkPath);
+      const cmakePath = path.join(config.sdkPath, 'example', 'h1', 'CMakeLists.txt');
+      await fs.access(cmakePath, fs.constants.R_OK);
     } catch (error) {
-      console.error(`[${new Date().toLocaleTimeString()}] Ошибка при проверке CMakeLists.txt:`, error);
+      console.error(`[${new Date().toLocaleTimeString()}] Нет доступа к CMakeLists.txt:`, error);
+      return res.status(400).json({ 
+        error: 'Ошибка доступа к SDK',
+        details: 'Не удалось получить доступ к CMakeLists.txt. Проверьте путь к SDK и права доступа.'
+      });
     }
 
     await fs.writeFile(CONFIG_PATH, JSON.stringify(config, null, 2), 'utf8');
     res.json({ success: true });
   } catch (error) {
     console.error(`[${new Date().toLocaleTimeString()}] Ошибка при сохранении конфига:`, error);
-    res.status(500).json({ error: 'Ошибка при сохранении конфигурации' });
+    res.status(500).json({ 
+      error: 'Ошибка при сохранении конфигурации',
+      details: error.message
+    });
   }
 });
 
