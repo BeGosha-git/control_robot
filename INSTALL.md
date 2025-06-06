@@ -13,9 +13,10 @@ git clone https://github.com/BeGosha-git/control_robot.git
 cd control_robot
 ```
 
-2. Запустите скрипт установки:
+2. Запустите скрипт:
 ```bash
-sudo ./install.sh
+chmod +x start_h1_control.sh
+sudo ./start_h1_control.sh
 ```
 
 Скрипт автоматически выполнит следующие действия:

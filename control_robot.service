@@ -10,7 +10,7 @@ Type=simple
 User=unitree
 Group=docker
 WorkingDirectory=/home/unitree/control_robot
-ExecStart=/home/unitree/control_robot/start_h1.sh
+ExecStart=/home/unitree/control_robot/start_h1_control.sh
 Restart=always
 RestartSec=10
 StandardOutput=append:/home/unitree/control_robot.log
@@ -21,9 +21,9 @@ CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_RAW CAP_DAC_OVERRIDE
 AmbientCapabilities=CAP_NET_ADMIN CAP_NET_RAW CAP_DAC_OVERRIDE
 
 # Настройки безопасности
-NoNewPrivileges=no  # Разрешаем повышение привилегий для работы с файлами
-ProtectSystem=no    # Разрешаем доступ к системным файлам
-ProtectHome=no      # Разрешаем доступ к домашней директории
+NoNewPrivileges=false
+ProtectSystem=false
+ProtectHome=false
 PrivateTmp=yes
 PrivateDevices=yes
 ProtectKernelTunables=yes

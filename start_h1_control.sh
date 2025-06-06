@@ -42,6 +42,42 @@ update_repository() {
     chmod +x install.sh || error "Не удалось установить права на install.sh"
 }
 
+# Функция для проверки и обновления сервиса
+update_service() {
+    info "Проверка системного сервиса..."
+    
+    # Проверяем, существует ли файл сервиса
+    if [ -f "/etc/systemd/system/control_robot.service" ]; then
+        # Сравниваем текущий файл сервиса с новым
+        if ! cmp -s "control_robot.service" "/etc/systemd/system/control_robot.service"; then
+            info "Обнаружена новая версия сервиса, обновляем..."
+            # Останавливаем и отключаем старый сервис
+            systemctl stop control_robot 2>/dev/null
+            systemctl disable control_robot 2>/dev/null
+            # Удаляем старый файл сервиса
+            rm -f /etc/systemd/system/control_robot.service
+            # Копируем новый файл сервиса
+            cp control_robot.service /etc/systemd/system/ || error "Не удалось скопировать файл сервиса"
+            chmod 644 /etc/systemd/system/control_robot.service || error "Не удалось установить права на файл сервиса"
+            # Перезагружаем systemd и запускаем сервис
+            systemctl daemon-reload || error "Не удалось перезагрузить systemd"
+            systemctl enable control_robot.service || error "Не удалось включить сервис"
+            systemctl start control_robot.service || error "Не удалось запустить сервис"
+            info "Сервис успешно обновлен"
+        else
+            info "Сервис актуален"
+        fi
+    else
+        info "Установка нового сервиса..."
+        cp control_robot.service /etc/systemd/system/ || error "Не удалось скопировать файл сервиса"
+        chmod 644 /etc/systemd/system/control_robot.service || error "Не удалось установить права на файл сервиса"
+        systemctl daemon-reload || error "Не удалось перезагрузить systemd"
+        systemctl enable control_robot.service || error "Не удалось включить сервис"
+        systemctl start control_robot.service || error "Не удалось запустить сервис"
+        info "Сервис успешно установлен"
+    fi
+}
+
 # Проверка прав root
 if [ "$EUID" -ne 0 ]; then
     error "Этот скрипт должен быть запущен с правами root (sudo)"
@@ -110,21 +146,9 @@ chmod +x "$WORK_DIR/install.sh" || error "Не удалось установит
 
 # Проверка и установка системного сервиса
 if [ -f "control_robot.service" ]; then
-    info "Установка системного сервиса..."
-    cp control_robot.service /etc/systemd/system/ || error "Не удалось скопировать файл сервиса"
-    chmod 644 /etc/systemd/system/control_robot.service || error "Не удалось установить права на файл сервиса"
-
-    # Создание и настройка лог-файла
-    info "Настройка лог-файла..."
-    touch /home/unitree/control_robot.log || error "Не удалось создать лог-файл"
-    chown unitree:unitree /home/unitree/control_robot.log || error "Не удалось изменить владельца лог-файла"
-    chmod 644 /home/unitree/control_robot.log || error "Не удалось установить права на лог-файл"
-
-    # Перезагрузка systemd и запуск сервиса
-    info "Настройка и запуск сервиса..."
-    systemctl daemon-reload || error "Не удалось перезагрузить systemd"
-    systemctl enable control_robot.service || error "Не удалось включить сервис"
-    systemctl start control_robot.service || error "Не удалось запустить сервис"
+    update_service
+else
+    warn "Файл control_robot.service не найден, пропускаем установку сервиса"
 fi
 
 # Проверка доступа к камере
