@@ -1141,10 +1141,10 @@ app.post('/api/execute', async (req, res) => {
   processStartTime = Date.now();
 
   // Формируем команду для выполнения на хост-машине
-  const hostCommand = `docker exec control_robot-backend-1 ${command}`;
+  const hostCommand = command;
   
-  // Используем spawn для выполнения команды на хост-машине
-  const proc = spawn('docker', ['exec', 'control_robot-backend-1', '/bin/bash', '-c', command], {
+  // Используем spawn для выполнения команды напрямую на хост-машине
+  const proc = spawn('/bin/bash', ['-c', command], {
     windowsHide: true,
     detached: true
   });
@@ -1231,16 +1231,17 @@ app.post('/api/execute', async (req, res) => {
 app.post('/api/interrupt', async (req, res) => {
   if (isProcessing && currentProcessPid) {
     try {
-      // Используем docker exec для отправки сигнала процессу внутри контейнера
-      const killCommand = `docker exec control_robot-backend-1 kill -15 ${currentProcessPid}`;
-      const proc = spawn('docker', ['exec', 'control_robot-backend-1', 'kill', '-15', currentProcessPid.toString()], {
+      // Отправляем сигнал процессу напрямую на хост-машине
+      const killCommand = `kill -15 ${currentProcessPid}`;
+      const proc = spawn('/bin/bash', ['-c', killCommand], {
         windowsHide: true
       });
 
       proc.on('close', async (code) => {
         if (code !== 0) {
           // Если не удалось отправить SIGTERM, пробуем SIGKILL
-          const forceKillProc = spawn('docker', ['exec', 'control_robot-backend-1', 'kill', '-9', currentProcessPid.toString()], {
+          const forceKillCommand = `kill -9 ${currentProcessPid}`;
+          const forceKillProc = spawn('/bin/bash', ['-c', forceKillCommand], {
             windowsHide: true
           });
           
