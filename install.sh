@@ -50,19 +50,26 @@ fi
 
 # Проверка и создание рабочей директории
 WORK_DIR="/home/unitree/control_robot"
-if [ ! -d "$WORK_DIR" ]; then
-    info "Создание рабочей директории..."
-    mkdir -p "$WORK_DIR" || error "Не удалось создать рабочую директорию"
-fi
+CURRENT_DIR=$(pwd)
 
-# Копирование файлов в рабочую директорию
-info "Копирование файлов в рабочую директорию..."
-cp -r ./* "$WORK_DIR/" || error "Не удалось скопировать файлы"
-chown -R unitree:unitree "$WORK_DIR" || error "Не удалось изменить владельца файлов"
+# Если мы уже в рабочей директории, пропускаем копирование
+if [ "$CURRENT_DIR" = "$WORK_DIR" ]; then
+    info "Установка в текущей директории..."
+else
+    if [ ! -d "$WORK_DIR" ]; then
+        info "Создание рабочей директории..."
+        mkdir -p "$WORK_DIR" || error "Не удалось создать рабочую директорию"
+    fi
+
+    # Копирование файлов в рабочую директорию
+    info "Копирование файлов в рабочую директорию..."
+    cp -r ./* "$WORK_DIR/" || error "Не удалось скопировать файлы"
+    chown -R unitree:unitree "$WORK_DIR" || error "Не удалось изменить владельца файлов"
+fi
 
 # Установка прав на скрипты
 info "Установка прав на скрипты..."
-chmod +x "$WORK_DIR/start_h1.sh" || error "Не удалось установить права на start_h1.sh"
+chmod +x "$WORK_DIR/start_h1.sh" 2>/dev/null || true
 chmod +x "$WORK_DIR/install.sh" || error "Не удалось установить права на install.sh"
 
 # Проверка и установка системного сервиса

@@ -26,6 +26,7 @@ cd control_robot
 
 2. Запустите скрипт установки:
 ```bash
+chmod +x install.sh
 sudo ./install.sh
 ```
 
