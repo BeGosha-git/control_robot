@@ -1141,15 +1141,15 @@ app.post('/api/execute', async (req, res) => {
   processStartTime = Date.now();
 
   const shell = process.platform === 'win32' ? 'cmd.exe' : '/bin/bash';
-  // Добавляем sudo для выполнения команд на хост-системе
+  // Изменяем способ выполнения команды с sudo для корректной работы с встроенными командами
   const fullCommand = process.platform === 'win32' 
     ? `cmd.exe /c "${command}"` 
-    : `sudo /bin/bash -c "${command}"`;
+    : `sudo -s bash -c "${command}"`;
 
   // Используем spawn вместо exec для лучшего контроля над процессом
   const proc = spawn(shell, process.platform === 'win32' 
     ? ['/c', command] 
-    : ['-c', `sudo ${command}`], {
+    : ['-c', `sudo -s bash -c "${command}"`], {
     windowsHide: true,
     detached: process.platform !== 'win32' // На Linux создаем новую группу процессов
   });
