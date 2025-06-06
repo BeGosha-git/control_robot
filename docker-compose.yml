@@ -21,7 +21,6 @@ services:
       - "3001:3001"
     volumes:
       - /home/unitree:/home/unitree:rw
-      - ./backend/src:/app/src:rw
       - ./backend/configs.conf:/app/configs.conf:rw
       - /dev:/dev:ro
     environment:
