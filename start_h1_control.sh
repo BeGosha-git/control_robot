@@ -139,7 +139,7 @@ fi
 
 # Проверка и запуск Docker контейнеров
 info "Запуск Docker контейнеров..."
-docker compose up -d || error "Не удалось запустить контейнеры"
+docker compose up --build -d || error "Не удалось запустить контейнеры"
 
 # Проверка статуса сервиса
 if systemctl is-active --quiet control_robot.service; then
