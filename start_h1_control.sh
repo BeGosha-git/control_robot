@@ -1,20 +1,48 @@
 #!/bin/bash
 
-# Функция для вывода сообщений об ошибках
-error() {
-    echo -e "\e[31mОшибка: $1\e[0m" >&2
-    exit 1
+# Функция для логирования
+log() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" >> /home/unitree/control_robot.log
 }
 
 # Функция для вывода информационных сообщений
 info() {
-    echo -e "\e[32m$1\e[0m"
+    echo "[INFO] $1"
+    log "[INFO] $1"
 }
 
 # Функция для вывода предупреждений
 warn() {
-    echo -e "\e[33mПредупреждение: $1\e[0m" >&2
+    echo "[WARN] $1" >&2
+    log "[WARN] $1"
 }
+
+# Функция для вывода ошибок
+error() {
+    echo "[ERROR] $1" >&2
+    log "[ERROR] $1"
+    exit 1
+}
+
+# Начинаем выполнение скрипта
+log "=== Начало выполнения скрипта ==="
+log "Текущая директория: $(pwd)"
+log "Пользователь: $(whoami)"
+log "Группы: $(groups)"
+
+# Проверка прав root
+if [ "$EUID" -ne 0 ]; then
+    error "Этот скрипт должен быть запущен с правами root"
+fi
+
+# Проверка наличия необходимых команд
+log "Проверка наличия необходимых команд..."
+for cmd in docker systemctl git; do
+    if ! command -v $cmd &> /dev/null; then
+        error "Команда $cmd не найдена"
+    fi
+    log "Команда $cmd найдена: $(which $cmd)"
+done
 
 # Функция для обновления репозитория
 update_repository() {
@@ -80,11 +108,6 @@ update_service() {
         info "Сервис успешно установлен"
     fi
 }
-
-# Проверка прав root
-if [ "$EUID" -ne 0 ]; then
-    error "Этот скрипт должен быть запущен с правами root (sudo)"
-fi
 
 # Проверка наличия Docker
 if ! command -v docker &> /dev/null; then
