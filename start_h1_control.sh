@@ -97,9 +97,62 @@ install_backend_deps() {
     return 0
 }
 
+# Функция для проверки и освобождения порта
+check_and_free_port() {
+    local port=$1
+    info "Проверка порта $port..."
+    
+    # Проверяем, используется ли порт
+    if lsof -i :$port > /dev/null 2>&1; then
+        info "Порт $port занят, пытаемся освободить..."
+        
+        # Получаем PID процесса, использующего порт
+        local pid=$(lsof -t -i :$port)
+        if [ -n "$pid" ]; then
+            info "Найден процесс с PID $pid, использующий порт $port"
+            
+            # Пытаемся корректно завершить процесс
+            if kill -15 $pid 2>/dev/null; then
+                info "Отправлен сигнал завершения процессу $pid"
+                # Даем процессу время на корректное завершение
+                sleep 2
+                
+                # Проверяем, завершился ли процесс
+                if kill -0 $pid 2>/dev/null; then
+                    warn "Процесс $pid не завершился корректно, принудительно завершаем..."
+                    kill -9 $pid 2>/dev/null
+                    sleep 1
+                fi
+            else
+                warn "Не удалось отправить сигнал завершения, принудительно завершаем процесс $pid"
+                kill -9 $pid 2>/dev/null
+                sleep 1
+            fi
+        fi
+        
+        # Проверяем, освободился ли порт
+        if lsof -i :$port > /dev/null 2>&1; then
+            error "Не удалось освободить порт $port"
+            return 1
+        else
+            info "Порт $port успешно освобожден"
+        fi
+    else
+        info "Порт $port свободен"
+    fi
+    
+    return 0
+}
+
 # Функция для запуска бэкенда
 start_backend() {
     info "Запуск бэкенда..."
+    
+    # Проверяем и освобождаем порт 3001
+    if ! check_and_free_port 3001; then
+        error "Не удалось подготовить порт для бэкенда"
+        return 1
+    fi
     
     # Проверяем наличие server.js
     if [ ! -f "backend/server.js" ]; then
@@ -119,9 +172,14 @@ start_backend() {
         return 1
     }
     
-    # Запускаем сервер
-    info "Запуск Node.js сервера..."
-    if ! node server.js; then
+    # Запускаем сервер в фоновом режиме
+    info "Запуск Node.js сервера в фоновом режиме..."
+    nohup node server.js > ../backend.log 2>&1 &
+    BACKEND_PID=$!
+    
+    # Проверяем, запустился ли процесс
+    sleep 2
+    if ! kill -0 $BACKEND_PID 2>/dev/null; then
         error "Не удалось запустить бэкенд"
         cd .. || true
         return 1
@@ -130,6 +188,7 @@ start_backend() {
     # Возвращаемся в корневую директорию
     cd .. || true
     
+    info "Бэкенд успешно запущен (PID: $BACKEND_PID)"
     return 0
 }
 
