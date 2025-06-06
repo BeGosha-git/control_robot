@@ -16,8 +16,8 @@ services:
     networks:
       - h1_network
     restart: unless-stopped
-    depends_on:
-      - backend
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
 networks:
   h1_network:
