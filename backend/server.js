@@ -1141,31 +1141,17 @@ app.post('/api/execute', async (req, res) => {
   processStartTime = Date.now();
 
   const shell = process.platform === 'win32' ? 'cmd.exe' : '/bin/bash';
-  
-  // Добавляем логирование для отладки
-  console.log(`[${new Date().toLocaleTimeString()}] Выполнение команды: ${command}`);
-  console.log(`[${new Date().toLocaleTimeString()}] PATH: ${process.env.PATH}`);
-  
-  // Изменяем команду для использования полного пути к cmake
-  const modifiedCommand = process.platform === 'win32' 
-    ? command 
-    : command.replace('cmake', '/usr/bin/cmake');
-
-  // Изменяем способ выполнения команды с sudo для загрузки профиля пользователя
+  // Добавляем sudo для выполнения команд на хост-системе
   const fullCommand = process.platform === 'win32' 
     ? `cmd.exe /c "${command}"` 
-    : `sudo -i bash -c "export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin && source /etc/profile && source ~/.profile && source ~/.bashrc && which cmake && echo 'CMake path:' && which cmake && ${modifiedCommand}"`;
+    : `sudo /bin/bash -c "${command}"`;
 
   // Используем spawn вместо exec для лучшего контроля над процессом
   const proc = spawn(shell, process.platform === 'win32' 
     ? ['/c', command] 
-    : ['-c', `sudo -i bash -c "export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin && source /etc/profile && source ~/.profile && source ~/.bashrc && which cmake && echo 'CMake path:' && which cmake && ${modifiedCommand}"`], {
+    : ['-c', `sudo ${command}`], {
     windowsHide: true,
-    detached: process.platform !== 'win32', // На Linux создаем новую группу процессов
-    env: {
-      ...process.env,
-      PATH: '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin'
-    }
+    detached: process.platform !== 'win32' // На Linux создаем новую группу процессов
   });
 
     currentProcess = proc;
@@ -1174,14 +1160,11 @@ app.post('/api/execute', async (req, res) => {
     let stdout = '';
     let stderr = '';
 
-    // Добавляем дополнительное логирование вывода
     proc.stdout.on('data', (data) => {
-      console.log(`[${new Date().toLocaleTimeString()}] STDOUT: ${data.toString()}`);
       stdout += data.toString();
     });
 
     proc.stderr.on('data', (data) => {
-      console.log(`[${new Date().toLocaleTimeString()}] STDERR: ${data.toString()}`);
       stderr += data.toString();
     });
 
@@ -1708,7 +1691,7 @@ async function findFilesWithUpdateJointPositions(sdkPath) {
     });
     return [];
   }
-}
+    }
 
 // Добавляем новый эндпоинт для получения списка файлов с updateJointPositions
 app.get('/api/motion/valid-files', async (req, res) => {
