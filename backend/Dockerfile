@@ -11,7 +11,7 @@ COPY package*.json ./
 RUN npm install
 
 # Копируем исходный код
-COPY src/ ./src/
+COPY server.js ./
 COPY configs.conf ./
 
 # Создаем директорию для файлов
@@ -22,4 +22,4 @@ RUN mkdir -p /app/test_files && \
 EXPOSE 3001
 
 # Запускаем сервер
-CMD ["node", "src/server.js"] 
+CMD ["node", "server.js"] 
