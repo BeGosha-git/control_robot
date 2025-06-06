@@ -36,9 +36,9 @@ update_repository() {
         cp /tmp/configs.conf.backup backend/configs.conf || warn "Не удалось восстановить configs.conf"
         rm /tmp/configs.conf.backup
     fi
-    
-    # Обновляем права на скрипт
-    chmod +x start_h1_control.sh || error "Не удалось установить права на start_h1_control.sh"
+
+    # Обновляем права
+    chown -R unitree:unitree . || warn "Не удалось обновить владельца файлов"
 }
 
 # Функция для проверки и обновления сервиса
@@ -137,11 +137,6 @@ else
     cd "$WORK_DIR" || error "Не удалось перейти в рабочую директорию"
     update_repository
 fi
-
-# Установка прав на скрипты
-info "Установка прав на скрипты..."
-chmod +x "$WORK_DIR/start_h1.sh" 2>/dev/null || true
-chmod +x "$WORK_DIR/install.sh" || error "Не удалось установить права на install.sh"
 
 # Проверка и установка системного сервиса
 if [ -f "control_robot.service" ]; then
