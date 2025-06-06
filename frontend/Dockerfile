@@ -3,6 +3,9 @@ FROM node:18-alpine as builder
 
 WORKDIR /app
 
+# Устанавливаем необходимые зависимости для сборки
+RUN apk add --no-cache python3 make g++
+
 # Копируем файлы package.json и package-lock.json
 COPY package*.json ./
 
@@ -12,7 +15,8 @@ RUN npm ci --force
 # Копируем исходный код
 COPY . .
 
-# Собираем приложение
+# Собираем приложение с отключенными source maps
+ENV GENERATE_SOURCEMAP=false
 RUN npm run build
 
 # Этап production
@@ -31,7 +35,15 @@ COPY nginx.conf /etc/nginx/conf.d/default.conf
 RUN mkdir -p /var/log/nginx && \
     chown -R nginx:nginx /var/log/nginx && \
     chown -R nginx:nginx /usr/share/nginx/html && \
-    chmod -R 755 /usr/share/nginx/html
+    chmod -R 755 /usr/share/nginx/html && \
+    # Удаляем дефолтную конфигурацию nginx
+    rm -f /etc/nginx/conf.d/default.conf && \
+    # Создаем директорию для временных файлов
+    mkdir -p /var/cache/nginx && \
+    chown -R nginx:nginx /var/cache/nginx
+
+# Проверяем конфигурацию nginx
+RUN nginx -t
 
 # Открываем порт
 EXPOSE 80
