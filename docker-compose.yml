@@ -23,11 +23,16 @@ services:
       - /home/unitree:/home/unitree:rw
       - ./backend/configs.conf:/app/configs.conf:rw
       - /dev:/dev:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
     environment:
       - NODE_ENV=production
       - PORT=3001
       - ROOT_PATH=/home/unitree
     privileged: true
+    cap_add:
+      - SYS_ADMIN
+    security_opt:
+      - apparmor:unconfined
     networks:
       - app-network
     restart: unless-stopped
