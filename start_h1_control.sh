@@ -101,31 +101,35 @@ install_backend_deps() {
 start_backend() {
     info "Запуск бэкенда..."
     
-    if [ ! -d "backend" ]; then
-        error "Директория backend не найдена"
+    # Проверяем наличие server.js
+    if [ ! -f "backend/server.js" ]; then
+        error "Файл server.js не найден в директории backend"
         return 1
     fi
     
-    cd backend || return 1
-    
-    # Проверяем, не запущен ли уже бэкенд
-    if pgrep -f "node.*server.js" > /dev/null; then
-        info "Бэкенд уже запущен"
-        return 0
+    # Проверяем наличие package.json
+    if [ ! -f "backend/package.json" ]; then
+        error "Файл package.json не найден в директории backend"
+        return 1
     fi
     
-    # Запускаем бэкенд в фоновом режиме
-    nohup node src/server.js > backend.log 2>&1 &
+    # Переходим в директорию бэкенда
+    cd backend || {
+        error "Не удалось перейти в директорию backend"
+        return 1
+    }
     
-    # Проверяем, запустился ли процесс
-    sleep 2
-    if ! pgrep -f "node.*server.js" > /dev/null; then
+    # Запускаем сервер
+    info "Запуск Node.js сервера..."
+    if ! node server.js; then
         error "Не удалось запустить бэкенд"
+        cd .. || true
         return 1
     fi
     
-    cd ..
-    info "Бэкенд успешно запущен"
+    # Возвращаемся в корневую директорию
+    cd .. || true
+    
     return 0
 }
 
