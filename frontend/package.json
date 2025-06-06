@@ -1,0 +1,103 @@
+{
+  "name": "h1-motion-creator",
+  "version": "0.1.0",
+  "private": true,
+  "proxy": "http://localhost:3001",
+  "sideEffects": false,
+  "dependencies": {
+    "@emotion/react": "^11.11.3",
+    "@emotion/styled": "^11.11.0",
+    "@monaco-editor/react": "^4.6.0",
+    "@mui/icons-material": "^5.15.6",
+    "@mui/lab": "^5.0.0-alpha.162",
+    "@mui/material": "^5.15.6",
+    "@react-three/drei": "9.92.7",
+    "@react-three/fiber": "8.15.12",
+    "@types/node": "^20.11.16",
+    "@types/react": "^18.2.52",
+    "@types/react-beautiful-dnd": "^13.1.8",
+    "@types/react-dom": "^18.2.18",
+    "@types/three": "^0.161.2",
+    "ajv": "^8.17.1",
+    "ajv-keywords": "^5.1.0",
+    "autoprefixer": "^10.4.17",
+    "axios": "^1.6.7",
+    "compression-webpack-plugin": "^10.0.0",
+    "fast-xml-parser": "^4.3.2",
+    "filesize": "^10.1.0",
+    "flv.js": "^1.6.2",
+    "monaco-editor": "^0.45.0",
+    "monaco-editor-webpack-plugin": "^7.1.0",
+    "notistack": "^3.0.1",
+    "postcss": "^8.4.33",
+    "react": "^18.2.0",
+    "react-beautiful-dnd": "^13.1.1",
+    "react-dnd": "^16.0.1",
+    "react-dnd-html5-backend": "^16.0.1",
+    "react-dom": "^18.2.0",
+    "react-dropzone": "^14.2.3",
+    "react-router-dom": "^6.21.3",
+    "react-scripts": "5.0.1",
+    "sanitize.css": "^13.0.0",
+    "tailwindcss": "^3.4.1",
+    "terser-webpack-plugin": "^5.3.9",
+    "three": "0.161.0",
+    "three-stdlib": "^2.28.7",
+    "timers-browserify": "^2.0.12",
+    "typescript": "4.9.5",
+    "urdf-loader": "^0.12.5",
+    "xml2js": "^0.6.2"
+  },
+  "scripts": {
+    "start": "craco start",
+    "build": "craco build",
+    "analyze": "set \"GENERATE_SOURCEMAP=false\" && craco build --stats && webpack-bundle-analyzer build/stats.json",
+    "test": "craco test",
+    "eject": "react-scripts eject"
+  },
+  "eslintConfig": {
+    "extends": [
+      "react-app",
+      "react-app/jest"
+    ]
+  },
+  "browserslist": {
+    "production": [
+      ">0.2%",
+      "not dead",
+      "not op_mini all"
+    ],
+    "development": [
+      "last 1 chrome version",
+      "last 1 firefox version",
+      "last 1 safari version"
+    ]
+  },
+  "devDependencies": {
+    "@babel/plugin-transform-runtime": "^7.23.9",
+    "@babel/preset-env": "^7.23.9",
+    "@babel/preset-react": "^7.23.9",
+    "@craco/craco": "^7.1.0",
+    "@csstools/normalize.css": "^12.0.0",
+    "assert": "^2.1.0",
+    "autoprefixer": "^10.4.17",
+    "babel-plugin-transform-imports": "^2.0.0",
+    "brotli-webpack-plugin": "^1.1.0",
+    "buffer": "^6.0.3",
+    "crypto-browserify": "^3.12.0",
+    "css-loader": "^5.2.7",
+    "css-minimizer-webpack-plugin": "^3.4.1",
+    "mini-css-extract-plugin": "^1.6.2",
+    "optimize-css-assets-webpack-plugin": "^6.0.1",
+    "path-browserify": "^1.0.1",
+    "postcss-loader": "^4.3.0",
+    "postcss-normalize": "^9.0.0",
+    "process": "^0.11.10",
+    "stream-browserify": "^3.0.0",
+    "style-loader": "^2.0.0",
+    "util": "^0.12.5",
+    "webpack-bundle-analyzer": "^4.9.1",
+    "webpack-cli": "^5.1.4",
+    "webpack-merge": "^5.10.0"
+  }
+}

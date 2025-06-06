@@ -1,0 +1,297 @@
+/* Сброс стилей */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow: hidden;
+}
+
+/* Стили для Monaco Editor */
+.monaco-editor {
+  padding: 0;
+  margin: 0;
+  width: 100% !important;
+  height: 100% !important;
+}
+
+.monaco-editor .margin {
+  background-color: #1e1e1e !important;
+}
+
+/* Стили для вкладок */
+.MuiTabs-root {
+  min-height: 48px !important;
+  background-color: #1e1e1e !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12) !important;
+}
+
+.MuiTab-root {
+  min-height: 48px !important;
+  text-transform: none !important;
+  font-size: 13px !important;
+  padding: 0 16px !important;
+  min-width: 120px !important;
+  color: rgba(255, 255, 255, 0.7) !important;
+}
+
+.MuiTab-root.Mui-selected {
+  color: #fff !important;
+}
+
+/* Стили для кнопок Build/Reset */
+.build-button {
+  background-color: #2196f3 !important;
+  color: white !important;
+  font-weight: bold !important;
+  text-transform: none !important;
+  padding: 6px 16px !important;
+  margin-right: 8px !important;
+  border-radius: 4px !important;
+}
+
+.build-button:hover {
+  background-color: #1976d2 !important;
+}
+
+.reset-button {
+  background-color: #ff9800 !important;
+  color: white !important;
+  font-weight: bold !important;
+  text-transform: none !important;
+  padding: 6px 16px !important;
+  border-radius: 4px !important;
+}
+
+.reset-button:hover {
+  background-color: #f57c00 !important;
+}
+
+/* Стили для файлового менеджера */
+.file-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.file-item {
+  display: flex;
+  align-items: center;
+  padding: 8px 16px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.file-item:hover {
+  background-color: rgba(255, 255, 255, 0.08);
+}
+
+.file-item.selected {
+  background-color: rgba(144, 202, 249, 0.16);
+}
+
+.file-icon {
+  margin-right: 8px;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.file-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Стили для поиска */
+.search-box {
+  padding: 8px 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.search-input {
+  width: 100%;
+  background-color: rgba(255, 255, 255, 0.08);
+  border: none;
+  border-radius: 4px;
+  padding: 8px 12px;
+  color: white;
+}
+
+.search-input:focus {
+  outline: none;
+  background-color: rgba(255, 255, 255, 0.12);
+}
+
+/* Стили для диалогов */
+.dialog-title {
+  background-color: #1e1e1e;
+  color: white;
+  padding: 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.dialog-content {
+  background-color: #1e1e1e;
+  color: white;
+  padding: 16px;
+}
+
+.dialog-actions {
+  background-color: #1e1e1e;
+  padding: 8px 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+/* Стили для кнопок в диалогах */
+.dialog-button {
+  text-transform: none !important;
+  font-weight: 500 !important;
+}
+
+/* Стили для сообщений об ошибках */
+.error-message {
+  color: #f44336;
+  padding: 8px 16px;
+  background-color: rgba(244, 67, 54, 0.08);
+  border-radius: 4px;
+  margin: 8px 16px;
+}
+
+/* Стили для пустого состояния редактора */
+.empty-editor {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: rgba(255, 255, 255, 0.7);
+  text-align: center;
+  padding: 24px;
+}
+
+.empty-editor-icon {
+  font-size: 48px !important;
+  margin-bottom: 16px;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.empty-editor-text {
+  font-size: 16px;
+  line-height: 1.5;
+}
+
+/* Глобальные стили */
+body {
+  margin: 0;
+  padding: 0;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* Анимации */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+}
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slideIn {
+  from {
+    transform: translateY(20px);
+    opacity: 0;
+}
+  to {
+    transform: translateY(0);
+    opacity: 1;
+}
+}
+
+/* Утилиты */
+.fade-in {
+  animation: fadeIn 0.3s ease-in-out;
+}
+
+.slide-in {
+  animation: slideIn 0.3s ease-in-out;
+}
+
+/* Адаптивные стили */
+@media (max-width: 600px) {
+  .MuiContainer-root {
+    padding: 1rem !important;
+  }
+  
+  .MuiTypography-h4 {
+    font-size: 1.5rem !important;
+  }
+  
+  .MuiTypography-h6 {
+    font-size: 1.1rem !important;
+  }
+  
+  .MuiButton-root {
+    min-height: 44px !important;
+    font-size: 0.875rem !important;
+  }
+}
+
+.page-container {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+}
+
+.scroll-area {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+/* Стили для скругленных скроллбаров */
+::-webkit-scrollbar {
+  width: 16px;
+  height: 16px;
+  border-radius: 8px;
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(120, 120, 120, 0.25);
+  border-radius: 8px;
+  min-height: 40px;
+  }
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(120, 120, 120, 0.35);
+}
+::-webkit-scrollbar-corner {
+  background: transparent;
+  }
+
+/* Monaco Editor: отдельный скроллбар, чтобы не перекрывал текст */
+.monaco-editor ::-webkit-scrollbar {
+  width: 12px !important;
+  height: 12px !important;
+  border-radius: 2px !important;
+}
+.monaco-editor ::-webkit-scrollbar-thumb {
+  border-radius: 2px !important;
+  }
+
+/* Firefox */
+* {
+  scrollbar-width: auto;
+  scrollbar-color: rgba(120,120,120,0.25) transparent;
+  border-radius: 8px;
+} 

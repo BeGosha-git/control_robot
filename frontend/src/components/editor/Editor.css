@@ -1,0 +1,214 @@
+.editor-container {
+  flex: 1 1 0;
+  display: flex;
+  flex-direction: column;
+  background-color: #1e1e1e;
+  color: #fff;
+  height: 100%;
+  min-width: 0;
+}
+
+.editor-tabs {
+  display: flex;
+  background-color: #252526;
+  border-bottom: 1px solid #3c3c3c;
+  padding: 0 10px;
+  overflow-x: auto;
+}
+
+.editor-tab {
+  display: flex;
+  align-items: center;
+  padding: 8px 15px;
+  background-color: #2d2d2d;
+  border-right: 1px solid #3c3c3c;
+  cursor: pointer;
+  user-select: none;
+  min-width: 100px;
+  max-width: 200px;
+}
+
+.editor-tab.active {
+  background-color: #1e1e1e;
+}
+
+.editor-tab:hover {
+  background-color: #3d3d3d;
+}
+
+.tab-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.close-button {
+  background: none;
+  border: none;
+  color: #fff;
+  cursor: pointer;
+  padding: 0 5px;
+  font-size: 16px;
+  opacity: 0.7;
+}
+
+.close-button:hover {
+  opacity: 1;
+}
+
+.editor-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  padding: 5px 10px;
+  background-color: #252526;
+  border-bottom: 1px solid #3c3c3c;
+}
+
+.toolbar-button {
+  padding: 5px 15px;
+  margin-left: 10px;
+  background-color: #0e639c;
+  color: #fff;
+  border: none;
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+.toolbar-button:hover {
+  background-color: #1177bb;
+}
+
+.toolbar-button.reset {
+  background-color: #c41e3a;
+}
+
+.toolbar-button.reset:hover {
+  background-color: #e02446;
+}
+
+.editor-content {
+  flex: 1 1 0;
+  padding: 10px;
+  overflow: auto;
+  min-height: 0;
+}
+
+.context-menu-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1999;
+}
+
+.context-menu {
+  position: fixed;
+  background-color: #2d2d2d;
+  border: 1px solid #4d4d4d;
+  border-radius: 4px;
+  padding: 5px 0;
+  z-index: 2000;
+  min-width: 150px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+}
+
+.context-menu button {
+  display: block;
+  width: 100%;
+  padding: 5px 10px;
+  text-align: left;
+  background: none;
+  border: none;
+  color: #fff;
+  cursor: pointer;
+}
+
+.context-menu button:hover {
+  background-color: #3d3d3d;
+}
+
+/* Адаптация для мобильных устройств */
+@media (max-width: 600px) {
+  .editor-container {
+    height: calc(100vh - 56px); /* Учитываем высоту табов */
+  }
+
+  .editor-tabs {
+    padding: 0 5px;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none; /* Firefox */
+    -ms-overflow-style: none; /* IE and Edge */
+  }
+
+  .editor-tabs::-webkit-scrollbar {
+    display: none; /* Chrome, Safari, Opera */
+  }
+
+  .editor-tab {
+    min-width: 80px;
+    max-width: 150px;
+    padding: 8px 10px;
+  }
+
+  .editor-toolbar {
+    padding: 5px;
+    flex-wrap: wrap;
+    gap: 5px;
+  }
+
+  .toolbar-button {
+    padding: 8px 12px;
+    margin-left: 5px;
+    font-size: 0.9em;
+  }
+
+  /* Оптимизация для горизонтальной ориентации */
+  @media (orientation: landscape) {
+    .editor-container {
+      height: calc(100vh - 48px);
+    }
+
+    .editor-tab {
+      min-width: 100px;
+    }
+
+    .editor-toolbar {
+      padding: 4px;
+    }
+  }
+
+  /* Оптимизация для вертикальной ориентации */
+  @media (orientation: portrait) {
+    .editor-container {
+      height: calc(100vh - 64px);
+    }
+
+    .editor-tab {
+      min-width: 90px;
+    }
+
+    .editor-toolbar {
+      padding: 6px;
+    }
+  }
+}
+
+/* Улучшения для тач-устройств */
+@media (hover: none) and (pointer: coarse) {
+  .editor-tab {
+    padding: 12px 15px;
+  }
+
+  .close-button {
+    padding: 8px;
+    font-size: 18px;
+  }
+
+  .toolbar-button {
+    padding: 10px 15px;
+    margin: 5px;
+  }
+} 

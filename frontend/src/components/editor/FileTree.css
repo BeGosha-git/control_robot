@@ -1,0 +1,65 @@
+.file-tree {
+  width: 250px;
+  height: 100%;
+  background-color: #1e1e1e;
+  color: #fff;
+  padding: 10px;
+  overflow-y: auto;
+}
+
+.file-tree-item {
+  padding: 5px 10px;
+  cursor: pointer;
+  position: relative;
+  user-select: none;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.file-tree-item:hover {
+  background-color: #2d2d2d;
+}
+
+.file-tree-item.dragging {
+  opacity: 0.5;
+}
+
+.file-tree-item.drop-target {
+  background-color: #3d3d3d;
+}
+
+.file-tree-item input {
+  background-color: #2d2d2d;
+  border: 1px solid #4d4d4d;
+  color: #fff;
+  padding: 2px 5px;
+  width: 100%;
+}
+
+.context-menu {
+  position: absolute;
+  right: 0;
+  top: 100%;
+  background-color: #2d2d2d;
+  border: 1px solid #4d4d4d;
+  border-radius: 4px;
+  padding: 5px 0;
+  z-index: 1000;
+  min-width: 150px;
+}
+
+.context-menu button {
+  display: block;
+  width: 100%;
+  padding: 5px 10px;
+  text-align: left;
+  background: none;
+  border: none;
+  color: #fff;
+  cursor: pointer;
+}
+
+.context-menu button:hover {
+  background-color: #3d3d3d;
+} 

@@ -1,0 +1,34 @@
+[Unit]
+Description=H1 Docker Service
+After=docker.service
+Requires=docker.service
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=unitree
+Group=docker
+WorkingDirectory=/home/unitree/h1_site
+ExecStart=/home/unitree/h1_site/start_h1.sh
+Restart=always
+RestartSec=10
+StandardOutput=append:/home/unitree/h1_docker.log
+StandardError=append:/home/unitree/h1_docker.log
+
+# Даем необходимые права для работы с Docker и файловой системой
+CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_RAW CAP_DAC_OVERRIDE
+AmbientCapabilities=CAP_NET_ADMIN CAP_NET_RAW CAP_DAC_OVERRIDE
+
+# Настройки безопасности
+NoNewPrivileges=no  # Разрешаем повышение привилегий для работы с файлами
+ProtectSystem=no    # Разрешаем доступ к системным файлам
+ProtectHome=no      # Разрешаем доступ к домашней директории
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+
+[Install]
+WantedBy=multi-user.target 

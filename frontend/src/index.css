@@ -1,0 +1,168 @@
+/* Глобальные стили */
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  height: 100%;
+  width: 100%;
+}
+
+body {
+  margin: 0;
+  min-height: 100%;
+  width: 100%;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow-x: hidden;
+  position: relative;
+}
+
+#root {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+code {
+  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
+    monospace;
+  font-size: 0.9em;
+  padding: 0.2em 0.4em;
+  border-radius: 3px;
+  background-color: rgba(0, 0, 0, 0.1);
+}
+
+/* Улучшения для выделения текста */
+::selection {
+  background-color: rgba(144, 202, 249, 0.3);
+  color: inherit;
+}
+
+/* Улучшения для фокуса */
+:focus-visible {
+  outline: 2px solid #90caf9;
+  outline-offset: 2px;
+}
+
+/* Улучшения для скроллбара */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(144, 202, 249, 0.3);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(144, 202, 249, 0.5);
+}
+
+/* Улучшения для выделения текста в редакторе */
+.ace_selection {
+  background-color: rgba(144, 202, 249, 0.2) !important;
+}
+
+.ace_active-line {
+  background-color: rgba(144, 202, 249, 0.1) !important;
+}
+
+/* Медиа-запросы для мобильных устройств */
+@media (max-width: 600px) {
+  html {
+    font-size: 14px;
+  }
+  
+  body {
+    -webkit-tap-highlight-color: transparent;
+    overflow-x: hidden;
+    width: 100vw;
+    position: fixed;
+  }
+  
+  code {
+    font-size: 0.85em;
+  }
+
+  /* Оптимизация для горизонтальной ориентации */
+  @media (orientation: landscape) {
+    html {
+      font-size: 13px;
+    }
+
+    #root {
+      height: 100vh;
+      overflow-y: auto;
+    }
+
+    .MuiContainer-root {
+      padding: 0.5rem !important;
+    }
+  }
+
+  /* Оптимизация для вертикальной ориентации */
+  @media (orientation: portrait) {
+    html {
+      font-size: 14px;
+    }
+
+    #root {
+      min-height: 100vh;
+      height: auto;
+    }
+
+    .MuiContainer-root {
+      padding: 0.75rem !important;
+    }
+  }
+}
+
+/* Улучшения для тач-устройств */
+@media (hover: none) and (pointer: coarse) {
+  button, 
+  [role="button"],
+  a {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  input, 
+  select, 
+  textarea {
+    font-size: 16px !important; /* Предотвращает зум на iOS */
+  }
+
+  /* Увеличиваем область нажатия для интерактивных элементов */
+  .MuiButton-root,
+  .MuiIconButton-root,
+  .file-item,
+  .editor-tab {
+    padding: 12px !important;
+  }
+}
+
+/* Оптимизация для маленьких экранов */
+@media (max-width: 360px) {
+  html {
+    font-size: 13px;
+  }
+
+  .MuiTypography-h4 {
+    font-size: 1.25rem !important;
+  }
+
+  .MuiTypography-h6 {
+    font-size: 1rem !important;
+  }
+} 
