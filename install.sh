@@ -16,6 +16,32 @@ warn() {
     echo -e "\e[33mПредупреждение: $1\e[0m" >&2
 }
 
+# Функция для обновления репозитория
+update_repository() {
+    info "Обновление репозитория..."
+    
+    # Сохраняем configs.conf
+    if [ -f "backend/configs.conf" ]; then
+        info "Сохранение configs.conf..."
+        cp backend/configs.conf /tmp/configs.conf.backup || warn "Не удалось сохранить configs.conf"
+    fi
+    
+    # Получаем последние изменения
+    git fetch origin || error "Не удалось получить изменения из репозитория"
+    git reset --hard origin/main || error "Не удалось обновить локальные файлы"
+    
+    # Восстанавливаем configs.conf
+    if [ -f "/tmp/configs.conf.backup" ]; then
+        info "Восстановление configs.conf..."
+        cp /tmp/configs.conf.backup backend/configs.conf || warn "Не удалось восстановить configs.conf"
+        rm /tmp/configs.conf.backup
+    fi
+    
+    # Обновляем права на файлы
+    chown -R unitree:unitree . || warn "Не удалось обновить владельца файлов"
+    chmod +x install.sh || error "Не удалось установить права на install.sh"
+}
+
 # Проверка прав root
 if [ "$EUID" -ne 0 ]; then
     error "Этот скрипт должен быть запущен с правами root (sudo)"
@@ -57,9 +83,10 @@ fi
 WORK_DIR="/home/unitree/control_robot"
 CURRENT_DIR=$(pwd)
 
-# Если мы уже в рабочей директории, пропускаем копирование
+# Если мы уже в рабочей директории, обновляем репозиторий
 if [ "$CURRENT_DIR" = "$WORK_DIR" ]; then
     info "Установка в текущей директории..."
+    update_repository
 else
     if [ ! -d "$WORK_DIR" ]; then
         info "Создание рабочей директории..."
@@ -70,6 +97,10 @@ else
     info "Копирование файлов в рабочую директорию..."
     cp -r ./* "$WORK_DIR/" || error "Не удалось скопировать файлы"
     chown -R unitree:unitree "$WORK_DIR" || error "Не удалось изменить владельца файлов"
+    
+    # Переходим в рабочую директорию и обновляем репозиторий
+    cd "$WORK_DIR" || error "Не удалось перейти в рабочую директорию"
+    update_repository
 fi
 
 # Установка прав на скрипты
@@ -106,7 +137,6 @@ fi
 
 # Запуск Docker контейнеров
 info "Запуск Docker контейнеров..."
-cd "$WORK_DIR" || error "Не удалось перейти в рабочую директорию"
 docker compose up -d || error "Не удалось запустить контейнеры"
 
 # Проверка статуса
