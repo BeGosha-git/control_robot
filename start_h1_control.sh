@@ -255,7 +255,7 @@ start_frontend() {
     return 0
 }
 
-# Основной код
+# Функция main
 main() {
     # Начальное логирование
     info "Запуск скрипта start_h1_control.sh"
@@ -263,18 +263,18 @@ main() {
     info "Пользователь: $(whoami)"
     info "Группы пользователя: $(groups)"
     
-    # Загружаем nvm
-    load_nvm
-    
-    # Устанавливаем Node.js
-    if ! install_nodejs; then
-        error "Ошибка при установке Node.js"
+    # Сначала обновляем репозиторий
+    if ! update_repository; then
+        error "Ошибка при обновлении репозитория"
         exit 1
     fi
     
-    # Обновляем репозиторий
-    if ! update_repository; then
-        error "Ошибка при обновлении репозитория"
+    # Загружаем nvm
+    load_nvm
+    
+    # Затем устанавливаем Node.js
+    if ! install_nodejs; then
+        error "Ошибка при установке Node.js"
         exit 1
     fi
     
