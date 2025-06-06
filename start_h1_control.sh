@@ -15,34 +15,67 @@ install_nodejs() {
     info "Проверка и установка Node.js..."
     
     # Проверяем наличие Node.js
-    if command -v node &> /dev/null && command -v npm &> /dev/null; then
+    if command -v node &> /dev/null; then
         node_version=$(node --version)
-        npm_version=$(npm --version)
-        info "Node.js $node_version и npm $npm_version уже установлены"
-        return 0
+        info "Node.js $node_version найден"
+        
+        # Проверяем версию Node.js
+        if [[ "${node_version#v}" < "14.0.0" ]]; then
+            info "Требуется обновление Node.js до версии 14 или выше"
+            # Удаляем старую версию
+            sudo apt-get remove -y nodejs npm
+            sudo apt-get autoremove -y
+        else
+            info "Версия Node.js подходящая"
+        fi
     fi
     
-    # Устанавливаем Node.js
-    info "Установка Node.js..."
-    if ! curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -; then
-        error "Не удалось добавить репозиторий Node.js"
-        return 1
+    # Проверяем наличие npm
+    if ! command -v npm &> /dev/null; then
+        info "Установка npm..."
+        if ! sudo apt-get install -y npm; then
+            error "Не удалось установить npm"
+            return 1
+        fi
     fi
     
-    if ! sudo apt-get install -y nodejs; then
-        error "Не удалось установить Node.js"
-        return 1
+    # Если Node.js отсутствует или требует обновления
+    if ! command -v node &> /dev/null || [[ "${node_version#v}" < "14.0.0" ]]; then
+        info "Установка/обновление Node.js..."
+        
+        # Удаляем старые версии
+        sudo apt-get remove -y nodejs npm
+        sudo apt-get autoremove -y
+        
+        # Добавляем репозиторий NodeSource
+        if ! curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -; then
+            error "Не удалось добавить репозиторий Node.js"
+            return 1
+        fi
+        
+        # Устанавливаем Node.js
+        if ! sudo apt-get install -y nodejs; then
+            error "Не удалось установить Node.js"
+            return 1
+        fi
     fi
     
     # Проверяем установку
     if ! command -v node &> /dev/null || ! command -v npm &> /dev/null; then
-        error "Node.js не установлен корректно"
+        error "Node.js или npm не установлены корректно"
         return 1
     fi
     
     node_version=$(node --version)
     npm_version=$(npm --version)
     info "Node.js $node_version и npm $npm_version успешно установлены"
+    
+    # Обновляем npm до последней версии
+    info "Обновление npm до последней версии..."
+    if ! sudo npm install -g npm@latest; then
+        warn "Не удалось обновить npm до последней версии"
+    fi
+    
     return 0
 }
 
