@@ -37,9 +37,8 @@ update_repository() {
         rm /tmp/configs.conf.backup
     fi
     
-    # Обновляем права на файлы
-    chown -R unitree:unitree . || warn "Не удалось обновить владельца файлов"
-    chmod +x install.sh || error "Не удалось установить права на install.sh"
+    # Обновляем права на скрипт
+    chmod +x start_h1_control.sh || error "Не удалось установить права на start_h1_control.sh"
 }
 
 # Функция для проверки и обновления сервиса
