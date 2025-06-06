@@ -249,34 +249,79 @@ update_repository() {
 
 # Функция для обновления сервиса
 update_service() {
-    info "Обновление сервиса..."
+    info "Проверка и обновление сервиса..."
     
-    # Проверяем наличие файла сервиса
-    if [ ! -f "control_robot.service" ]; then
-        error "Файл сервиса не найден"
+    # Путь к файлу сервиса в системе
+    local service_path="/etc/systemd/system/control_robot.service"
+    # Путь к файлу сервиса в репозитории
+    local repo_service_path="control_robot.service"
+    
+    # Проверяем наличие файла сервиса в репозитории
+    if [ ! -f "$repo_service_path" ]; then
+        error "Файл сервиса не найден в репозитории"
         return 1
-    fi
+    }
     
-    # Проверяем, существует ли старый сервис
-    if systemctl list-unit-files | grep -q "control_robot.service"; then
-        info "Останавливаем старый сервис..."
-        systemctl stop control_robot
-        systemctl disable control_robot
+    # Проверяем, существует ли сервис в системе
+    if [ -f "$service_path" ]; then
+        # Сравниваем файлы
+        if ! cmp -s "$repo_service_path" "$service_path"; then
+            info "Обнаружена новая версия сервиса, обновляем..."
+            
+            # Останавливаем сервис если он запущен
+            if systemctl is-active --quiet control_robot; then
+                info "Останавливаем текущий сервис..."
+                systemctl stop control_robot
+            fi
+            
+            # Отключаем сервис
+            if systemctl is-enabled --quiet control_robot; then
+                info "Отключаем текущий сервис..."
+                systemctl disable control_robot
+            fi
+            
+            # Удаляем старый файл сервиса
+            info "Удаляем старый файл сервиса..."
+            rm -f "$service_path"
+        else
+            info "Сервис актуален, обновление не требуется"
+            return 0
+        fi
     fi
     
     # Копируем новый файл сервиса
     info "Копируем новый файл сервиса..."
-    cp control_robot.service /etc/systemd/system/
+    if ! cp "$repo_service_path" "$service_path"; then
+        error "Не удалось скопировать файл сервиса"
+        return 1
+    fi
     
     # Устанавливаем права
-    chmod 644 /etc/systemd/system/control_robot.service
+    info "Устанавливаем права на файл сервиса..."
+    chmod 644 "$service_path"
     
     # Перезагружаем systemd
-    systemctl daemon-reload
+    info "Перезагрузка systemd..."
+    if ! systemctl daemon-reload; then
+        error "Не удалось перезагрузить systemd"
+        return 1
+    fi
     
-    # Включаем и запускаем сервис
-    systemctl enable control_robot
-    systemctl start control_robot
+    # Включаем сервис
+    info "Включаем сервис..."
+    if ! systemctl enable control_robot; then
+        error "Не удалось включить сервис"
+        return 1
+    fi
+    
+    # Запускаем сервис если он был запущен
+    if systemctl is-active --quiet control_robot; then
+        info "Запускаем обновленный сервис..."
+        if ! systemctl start control_robot; then
+            error "Не удалось запустить сервис"
+            return 1
+        fi
+    fi
     
     info "Сервис успешно обновлен"
     return 0
