@@ -9,6 +9,7 @@
 - Сохранение файлов движений в формате .cpp
 - Поддержка всех стандартных движений из шаблона
 - Контейнеризация с помощью Docker для простой установки и запуска
+- Системный сервис для автоматического запуска
 
 ## Требования
 
@@ -52,12 +53,24 @@ sudo ./start_h1.sh
 sudo ./install_service.sh
 ```
 
+### Конфигурация сервиса
+
+Сервис `control_robot.service` настраивается со следующими параметрами:
+- Запуск после Docker и сети
+- Пользователь: unitree
+- Группа: docker
+- Рабочая директория: /home/unitree/control_robot
+- Автоматический перезапуск при сбоях
+- Логирование в /home/unitree/h1_docker.log
+- Расширенные права для работы с сетью и файловой системой
+
 Управление сервисом:
 ```bash
-sudo systemctl start h1-docker    # запуск
-sudo systemctl stop h1-docker     # остановка
-sudo systemctl status h1-docker   # статус
-sudo systemctl disable h1-docker  # отключение автозапуска
+sudo systemctl start control_robot    # запуск
+sudo systemctl stop control_robot     # остановка
+sudo systemctl status control_robot   # статус
+sudo systemctl disable control_robot  # отключение автозапуска
+sudo journalctl -u control_robot -f   # просмотр логов
 ```
 
 ## Использование

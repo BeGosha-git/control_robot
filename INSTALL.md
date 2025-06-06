@@ -1,4 +1,92 @@
-# Установка H1 Control Center на Ubuntu
+# Инструкция по установке Control Robot
+
+## Требования
+
+- Ubuntu 20.04 или новее
+- Docker и Docker Compose
+- Доступ к камере (опционально)
+
+## Установка
+
+1. Клонируйте репозиторий:
+```bash
+git clone https://github.com/BeGosha-git/control_robot.git
+cd control_robot
+```
+
+2. Запустите скрипт установки:
+```bash
+sudo ./install.sh
+```
+
+3. Перезагрузите систему:
+```bash
+sudo reboot
+```
+
+## Запуск
+
+После установки и перезагрузки запустите приложение:
+```bash
+sudo ./start_h1.sh
+```
+
+Приложение будет доступно по адресам:
+- Frontend: http://localhost
+- Backend API: http://localhost:3001
+
+## Установка как системный сервис
+
+Для автоматического запуска при старте системы:
+```bash
+sudo ./install_service.sh
+```
+
+### Управление сервисом
+
+Проверка статуса:
+```bash
+sudo systemctl status control_robot
+```
+
+Просмотр логов:
+```bash
+sudo journalctl -u control_robot -f
+```
+
+Перезапуск сервиса:
+```bash
+sudo systemctl restart control_robot
+```
+
+Остановка сервиса:
+```bash
+sudo systemctl stop control_robot
+```
+
+Запуск сервиса:
+```bash
+sudo systemctl start control_robot
+```
+
+### Устранение неполадок
+
+1. Проверка логов сервиса:
+```bash
+sudo journalctl -u control_robot -f
+```
+
+2. Перезапуск сервиса:
+```bash
+sudo systemctl restart control_robot
+```
+
+3. Остановка и отключение сервиса:
+```bash
+sudo systemctl stop control_robot
+sudo systemctl disable control_robot
+sudo rm /etc/systemd/system/control_robot.service
+```
 
 ## Системные требования
 - Ubuntu 20.04 LTS или новее
