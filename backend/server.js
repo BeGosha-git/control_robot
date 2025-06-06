@@ -24,36 +24,29 @@ let lastInterrupt = false;
 let processStartTime = null;
 
 // Константы для путей и типов
-let ROOT_PATH = process.platform === 'win32' 
-  ? path.join(process.cwd(), 'test_files')
-  : '/home/unitree';
+let ROOT_PATH = '/home/unitree';  // Всегда используем путь хост-машины
 const ITEM_TYPES = {
   FILE: 'file',
   DIRECTORY: 'directory'
 };
 
-// Меняем путь к конфигурационному файлу на путь вне контейнера
-const CONFIG_PATH = process.platform === 'win32'
-  ? path.join(process.cwd(), 'backend', 'configs.conf')
-  : '/home/unitree/configs.conf';
-
+const CONFIG_PATH = '/home/unitree/control_robot/configs.conf';  // Путь к конфигу на хост-машине
 const DEFAULT_CONFIG = {
   robotButtons: [
     {
       id: 1,
       tag: 'build',
       name: 'Забилдить',
-      command: 'cd /home/unitree/unitree_sdk2-main && cd build && cmake .. && make'
+      command: 'cd /home/unitree/unitree_sdk2&&cd build&&cmake ..&&make'
     },
     {
       id: 2,
       tag: 'reset',
       name: 'Сброс',
-      command: '/home/unitree/unitree_sdk2-main/build/bin/H1_RESET_POSITION eth0'
+      command: '/home/unitree/unitree_sdk2/build/bin/H1_RESET_POSITION eth0'
     }
   ],
-  rootPath: '/home/unitree',
-  sdkPath: '/home/unitree/unitree_sdk2-main',
+  rootPath: path.join(process.cwd(), 'tests_files'),
   RobotName: 'H-0000'
 };
 
@@ -678,7 +671,7 @@ fsRouter.post('/upload', upload.any(), async (req, res) => {
   }
 });
 
-// Инициализация ROOT_PATH из конфига при запуске
+// Обновляем функцию initializeRootPath
 async function initializeRootPath() {
   try {
     const config = await readConfig();
@@ -693,24 +686,18 @@ async function initializeRootPath() {
       } catch (error) {
         console.error(`[${new Date().toLocaleTimeString()}] Ошибка доступа к ${normalizedPath}:`, error);
         // Если нет доступа к указанному пути, используем путь по умолчанию
-        ROOT_PATH = process.platform === 'win32'
-          ? path.join(process.cwd(), 'test_files')
-          : '/home/unitree';
+        ROOT_PATH = '/home/unitree';
         await fs.mkdir(ROOT_PATH, { recursive: true });
       }
     } else {
       // Если путь не указан в конфиге, используем путь по умолчанию
-      ROOT_PATH = process.platform === 'win32'
-        ? path.join(process.cwd(), 'test_files')
-        : '/home/unitree';
+      ROOT_PATH = '/home/unitree';
       await fs.mkdir(ROOT_PATH, { recursive: true });
     }
   } catch (error) {
     console.error(`[${new Date().toLocaleTimeString()}] Ошибка при инициализации корневого пути:`, error);
     // В случае ошибки используем путь по умолчанию
-    ROOT_PATH = process.platform === 'win32'
-      ? path.join(process.cwd(), 'test_files')
-      : '/home/unitree';
+    ROOT_PATH = '/home/unitree';
     await fs.mkdir(ROOT_PATH, { recursive: true }).catch(console.error);
   }
 }
@@ -1146,15 +1133,10 @@ app.post('/api/execute', async (req, res) => {
   processStartTime = Date.now();
 
   const shell = process.platform === 'win32' ? 'cmd.exe' : '/bin/bash';
-  // Добавляем sudo для выполнения команд на хост-системе
-  const fullCommand = process.platform === 'win32' 
-    ? `cmd.exe /c "${command}"` 
-    : `sudo /bin/bash -c "${command}"`;
+  const fullCommand = process.platform === 'win32' ? `cmd.exe /c "${command}"` : `/bin/bash -c "${command}"`;
 
   // Используем spawn вместо exec для лучшего контроля над процессом
-  const proc = spawn(shell, process.platform === 'win32' 
-    ? ['/c', command] 
-    : ['-c', `sudo ${command}`], {
+  const proc = spawn(shell, process.platform === 'win32' ? ['/c', command] : ['-c', command], {
     windowsHide: true,
     detached: process.platform !== 'win32' // На Linux создаем новую группу процессов
   });
@@ -1327,56 +1309,16 @@ app.post('/api/config', async (req, res) => {
 
     // Проверяем CMakeLists.txt при сохранении конфига
     try {
-      const cmakePath = path.join(config.sdkPath, 'example', 'h1', 'CMakeLists.txt');
-      await fs.access(cmakePath, fs.constants.R_OK);
+      await cleanupCMakeLists(config.sdkPath);
     } catch (error) {
-      console.error(`[${new Date().toLocaleTimeString()}] Нет доступа к CMakeLists.txt:`, error);
-      return res.status(400).json({ 
-        error: 'Ошибка доступа к SDK',
-        details: 'Не удалось получить доступ к CMakeLists.txt. Проверьте путь к SDK и права доступа.'
-      });
+      console.error(`[${new Date().toLocaleTimeString()}] Ошибка при проверке CMakeLists.txt:`, error);
     }
 
-    // Сохраняем конфиг через sudo
-    const configContent = JSON.stringify(config, null, 2);
-    const tempPath = path.join('/tmp', `config_${Date.now()}.json`);
-    
-    try {
-      // Сначала записываем во временный файл
-      await fs.writeFile(tempPath, configContent, 'utf8');
-      
-      // Затем перемещаем через sudo
-      const { exec } = require('child_process');
-      await new Promise((resolve, reject) => {
-        exec(`sudo mv ${tempPath} ${CONFIG_PATH}`, (error) => {
-          if (error) {
-            reject(error);
-          } else {
-            resolve();
-          }
-        });
-      });
-      
-      res.json({ success: true });
-    } catch (error) {
-      console.error(`[${new Date().toLocaleTimeString()}] Ошибка при сохранении конфига:`, error);
-      // Пробуем удалить временный файл в случае ошибки
-      try {
-        await fs.unlink(tempPath);
-      } catch (unlinkError) {
-        console.error('Ошибка при удалении временного файла:', unlinkError);
-      }
-      res.status(500).json({ 
-        error: 'Ошибка при сохранении конфигурации',
-        details: error.message
-      });
-    }
+    await fs.writeFile(CONFIG_PATH, JSON.stringify(config, null, 2), 'utf8');
+    res.json({ success: true });
   } catch (error) {
     console.error(`[${new Date().toLocaleTimeString()}] Ошибка при сохранении конфига:`, error);
-    res.status(500).json({ 
-      error: 'Ошибка при сохранении конфигурации',
-      details: error.message
-    });
+    res.status(500).json({ error: 'Ошибка при сохранении конфигурации' });
   }
 });
 
