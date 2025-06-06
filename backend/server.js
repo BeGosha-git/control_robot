@@ -32,20 +32,23 @@ const ITEM_TYPES = {
   DIRECTORY: 'directory'
 };
 
-const CONFIG_PATH = path.join(process.cwd(), 'configs.conf');
+// Изменяем путь к конфигурационному файлу
+const CONFIG_PATH = process.platform === 'win32'
+  ? path.join(process.cwd(), 'configs.conf')
+  : '/home/unitree/configs.conf';
 const DEFAULT_CONFIG = {
   robotButtons: [
     {
       id: 1,
       tag: 'build',
       name: 'Забилдить',
-      command: 'cd /home/unitree/unitree_sdk2-main && cd build && cmake .. && make'
+      command: 'sudo -s "cd /home/unitree/unitree_sdk2-main && cd build && cmake .. && make"'
     },
     {
       id: 2,
       tag: 'reset',
       name: 'Сброс',
-      command: '/home/unitree/unitree_sdk2-main/build/bin/H1_RESET_POSITION eth0'
+      command: 'sudo -s "/home/unitree/unitree_sdk2-main/build/bin/H1_RESET_POSITION eth0"'
     }
   ],
   rootPath: '/home/unitree',
@@ -1144,15 +1147,12 @@ app.post('/api/execute', async (req, res) => {
   const shell = process.platform === 'win32' ? 'cmd.exe' : '/bin/bash';
   // Добавляем sudo для выполнения команд на хост-системе
   const fullCommand = process.platform === 'win32' 
-    ? `cmd.exe /c "${command}"` 
-    : `sudo /bin/bash -c "${command}"`;
+    ? command 
+    : `sudo -s "${command}"`;
 
   // Используем spawn вместо exec для лучшего контроля над процессом
-  const proc = spawn(shell, process.platform === 'win32' 
-    ? ['/c', command] 
-    : ['-c', `sudo ${command}`], {
-    windowsHide: true,
-    detached: process.platform !== 'win32' // На Linux создаем новую группу процессов
+  const proc = spawn(shell, process.platform === 'win32' ? ['/c', fullCommand] : ['-c', fullCommand], {
+    stdio: ['pipe', 'pipe', 'pipe']
   });
 
     currentProcess = proc;
@@ -1321,21 +1321,16 @@ app.post('/api/config', async (req, res) => {
       return res.status(400).json({ error: 'Отсутствуют обязательные поля: RobotName, rootPath, sdkPath' });
     }
 
-    // Проверяем права доступа к файлу конфигурации
+    // Проверяем права доступа к директории конфигурации
+    const configDir = path.dirname(CONFIG_PATH);
     try {
-      await fs.access(CONFIG_PATH, fs.constants.R_OK | fs.constants.W_OK);
+      await fs.access(configDir, fs.constants.R_OK | fs.constants.W_OK);
     } catch (error) {
-      console.error(`[${new Date().toLocaleTimeString()}] Ошибка доступа к конфигурационному файлу:`, error);
-      // Пробуем установить права доступа
-      try {
-        await fs.chmod(CONFIG_PATH, 0o666);
-      } catch (chmodError) {
-        console.error(`[${new Date().toLocaleTimeString()}] Не удалось установить права доступа:`, chmodError);
-        return res.status(500).json({ 
-          error: 'Ошибка доступа к конфигурационному файлу',
-          details: 'Нет прав на запись в файл конфигурации'
-        });
-      }
+      console.error(`[${new Date().toLocaleTimeString()}] Ошибка доступа к директории конфигурации:`, error);
+      return res.status(500).json({ 
+        error: 'Ошибка доступа к директории конфигурации',
+        details: 'Нет прав на запись в директорию конфигурации'
+      });
     }
 
     // Проверяем CMakeLists.txt при сохранении конфига
@@ -1350,8 +1345,17 @@ app.post('/api/config', async (req, res) => {
       });
     }
 
-    await fs.writeFile(CONFIG_PATH, JSON.stringify(config, null, 2), 'utf8');
-    res.json({ success: true });
+    // Сохраняем конфигурацию
+    try {
+      await fs.writeFile(CONFIG_PATH, JSON.stringify(config, null, 2), 'utf8');
+      res.json({ success: true });
+    } catch (writeError) {
+      console.error(`[${new Date().toLocaleTimeString()}] Ошибка при записи конфигурации:`, writeError);
+      return res.status(500).json({ 
+        error: 'Ошибка при записи конфигурации',
+        details: writeError.message
+      });
+    }
   } catch (error) {
     console.error(`[${new Date().toLocaleTimeString()}] Ошибка при сохранении конфига:`, error);
     res.status(500).json({ 
@@ -1717,7 +1721,7 @@ async function findFilesWithUpdateJointPositions(sdkPath) {
     });
     return [];
   }
-    }
+}
 
 // Добавляем новый эндпоинт для получения списка файлов с updateJointPositions
 app.get('/api/motion/valid-files', async (req, res) => {
