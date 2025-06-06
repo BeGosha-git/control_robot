@@ -1,5 +1,5 @@
 # Используем официальный образ Node.js
-FROM node:18-slim
+FROM node:18
 
 # Создаем рабочую директорию
 WORKDIR /app
@@ -10,17 +10,15 @@ COPY package*.json ./
 # Устанавливаем зависимости
 RUN npm install
 
-# Копируем исходный код
+# Копируем исходные файлы
 COPY server.js ./
 COPY configs.conf ./
 
-# Создаем директорию для файлов
-RUN mkdir -p /app/test_files && \
-    chmod 777 /app/test_files
+# Создаем директорию для тестовых файлов
+RUN mkdir -p /app/test_files
 
-# Открываем порты
+# Открываем порт
 EXPOSE 3001
 
-# Явно указываем entrypoint
-ENTRYPOINT ["node"]
-CMD ["server.js"] 
+# Запускаем сервер
+CMD ["node", "server.js"] 
