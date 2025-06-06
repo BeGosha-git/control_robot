@@ -114,7 +114,7 @@ start_docker_containers() {
     
     # Ждем, пока контейнеры полностью запустятся
     info "Ожидание запуска контейнеров..."
-    sleep 10
+    sleep 3
     
     # Проверяем статус контейнеров
     if ! docker compose ps | grep -q "Up"; then
