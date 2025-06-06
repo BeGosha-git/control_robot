@@ -260,7 +260,7 @@ update_service() {
     if [ ! -f "$repo_service_path" ]; then
         error "Файл сервиса не найден в репозитории"
         return 1
-    }
+    fi
     
     # Проверяем, существует ли сервис в системе
     if [ -f "$service_path" ]; then
