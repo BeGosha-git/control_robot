@@ -1158,19 +1158,32 @@ const wss = new WebSocketServer({ server });
 wss.on('connection', (ws) => {
     console.log('WebSocket клиент подключен');
 
+    // Проверяем, доступен ли Python сервис
+    if (!isPythonRunning) {
+        console.log('Python сервис недоступен, отправляем fallback данные');
+        const fallbackData = {
+            type: 'error',
+            message: 'Сервис камер временно недоступен',
+            fallback: true
+        };
+        ws.send(JSON.stringify(fallbackData));
+        ws.close();
+        return;
+    }
+
     // Создаем HTTP запрос к Python сервису для стрима
     const streamRequest = async () => {
-  try {
+        try {
             const response = await fetch(`${PYTHON_SERVICE_URL}/api/cameras/stream`);
             const reader = response.body;
             
             reader.on('data', (chunk) => {
                 const data = chunk.toString();
                 const lines = data.split('\n');
-    
+
                 for (const line of lines) {
                     if (line.startsWith('data: ')) {
-      try {
+                        try {
                             const jsonData = JSON.parse(line.slice(6));
                             ws.send(JSON.stringify(jsonData));
                         } catch (e) {
@@ -1182,11 +1195,23 @@ wss.on('connection', (ws) => {
             
             reader.on('error', (error) => {
                 console.error('Ошибка чтения стрима:', error);
+                const errorData = {
+                    type: 'error',
+                    message: 'Ошибка подключения к стриму камер',
+                    fallback: true
+                };
+                ws.send(JSON.stringify(errorData));
                 ws.close();
             });
             
-  } catch (error) {
+        } catch (error) {
             console.error('Ошибка подключения к стриму:', error);
+            const errorData = {
+                type: 'error',
+                message: 'Сервис камер недоступен',
+                fallback: true
+            };
+            ws.send(JSON.stringify(errorData));
             ws.close();
         }
     };
