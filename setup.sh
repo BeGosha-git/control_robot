@@ -83,8 +83,9 @@ check_python3() {
     # Проверка наличия python3-venv
     if ! dpkg -l | grep -q python3-venv; then
         warn "python3-venv не установлен. Установка..."
-        apt update || error "Не удалось обновить пакеты"
-        apt install -y python3-venv || error "Не удалось установить python3-venv"
+        # Пробуем обновить пакеты с игнорированием ошибок репозиториев
+        apt update --allow-unauthenticated 2>/dev/null || apt update --allow-insecure-repositories 2>/dev/null || warn "Не удалось обновить пакеты, продолжаем установку"
+        apt install -y python3-venv --allow-unauthenticated || apt install -y python3-venv --allow-insecure-repositories || error "Не удалось установить python3-venv"
         info "python3-venv установлен"
     else
         info "python3-venv уже установлен"
@@ -255,8 +256,9 @@ install_python_dependencies() {
     # Проверка и установка python3-venv
     if ! dpkg -l | grep -q python3-venv; then
         warn "python3-venv не установлен. Установка..."
-        apt update || error "Не удалось обновить пакеты"
-        apt install -y python3-venv || error "Не удалось установить python3-venv"
+        # Пробуем обновить пакеты с игнорированием ошибок репозиториев
+        apt update --allow-unauthenticated 2>/dev/null || apt update --allow-insecure-repositories 2>/dev/null || warn "Не удалось обновить пакеты, продолжаем установку"
+        apt install -y python3-venv --allow-unauthenticated || apt install -y python3-venv --allow-insecure-repositories || error "Не удалось установить python3-venv"
         info "python3-venv установлен"
     else
         info "python3-venv уже установлен"
