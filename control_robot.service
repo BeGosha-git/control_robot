@@ -20,6 +20,7 @@ SyslogIdentifier=control_robot
 # Переменные окружения
 Environment=NODE_ENV=production
 Environment=HOME=/home/unitree
+Environment=SYSTEMD_EXEC_PID=1
 
 # Права доступа
 ReadWritePaths=/home/unitree
