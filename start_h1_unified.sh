@@ -43,9 +43,18 @@ info() {
     echo -e "${BLUE}[H1 Info]${NC} $1"
 }
 
-# Проверка прав root
-if [ "$EUID" -ne 0 ]; then
-    error "Этот скрипт должен быть запущен с правами root (sudo)"
+# Проверка прав и окружения
+if [ "$EUID" -eq 0 ]; then
+    # Запуск от root - все нормально
+    RUNNING_AS_ROOT=true
+    info "Запуск от root пользователя"
+elif [ "$USER" = "unitree" ] && [ -n "$SYSTEMD_EXEC_PID" ]; then
+    # Запуск от unitree через systemd - тоже нормально
+    RUNNING_AS_ROOT=false
+    info "Запуск от пользователя unitree через systemd"
+else
+    # Запуск от обычного пользователя без sudo
+    error "Этот скрипт должен быть запущен с правами root (sudo) или через systemd"
 fi
 
 # Проверка наличия Docker
@@ -122,8 +131,10 @@ update_from_git() {
         rm /tmp/configs.conf.backup
     fi
     
-    # Обновляем права на файлы
-    chown -R unitree:unitree . || warn "Не удалось обновить владельца файлов"
+    # Обновляем права на файлы только если запущены от root
+    if [ "$RUNNING_AS_ROOT" = true ]; then
+        chown -R unitree:unitree . || warn "Не удалось обновить владельца файлов"
+    fi
 }
 
 # Функция для проверки и установки Node.js
@@ -134,9 +145,14 @@ check_and_install_nodejs() {
     if [ -d "/home/unitree/.nvm" ] && [ -f "/home/unitree/.nvm/nvm.sh" ]; then
         info "Обнаружен nvm. Проверка версий..."
         
-        # Проверяем версии
-        info "Node.js версия: $(sudo -u unitree bash -c "source /home/unitree/.nvm/nvm.sh && node --version" 2>/dev/null)"
-        info "npm версия: $(sudo -u unitree bash -c "source /home/unitree/.nvm/nvm.sh && npm --version" 2>/dev/null)"
+        # Проверяем версии в зависимости от того, кто запускает
+        if [ "$RUNNING_AS_ROOT" = true ]; then
+            info "Node.js версия: $(sudo -u unitree bash -c "source /home/unitree/.nvm/nvm.sh && node --version" 2>/dev/null)"
+            info "npm версия: $(sudo -u unitree bash -c "source /home/unitree/.nvm/nvm.sh && npm --version" 2>/dev/null)"
+        else
+            info "Node.js версия: $(bash -c "source /home/unitree/.nvm/nvm.sh && node --version" 2>/dev/null)"
+            info "npm версия: $(bash -c "source /home/unitree/.nvm/nvm.sh && npm --version" 2>/dev/null)"
+        fi
     else
         error "nvm не найден. Пожалуйста, установите nvm"
     fi
