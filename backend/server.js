@@ -929,11 +929,24 @@ function startPythonService() {
         console.log('Виртуальное окружение не найдено, используется системный Python3');
     }
     
+    // Создаем директорию test_files если её нет
+    const testFilesDir = path.join(__dirname, 'test_files');
+    if (!require('fs').existsSync(testFilesDir)) {
+        try {
+            require('fs').mkdirSync(testFilesDir, { recursive: true });
+            console.log('Создана директория test_files');
+        } catch (error) {
+            console.error('Ошибка создания директории test_files:', error);
+        }
+    }
+    
     pythonProcess = spawn(pythonExecutable, [pythonPath], {
         stdio: ['pipe', 'pipe', 'pipe'],
         env: {
             ...process.env,
-            PYTHONPATH: path.join(__dirname, 'src', 'services')
+            PYTHONPATH: path.join(__dirname, 'src', 'services'),
+            PYTHONUNBUFFERED: '1',
+            VIRTUAL_ENV: path.join(__dirname, 'src', 'services', '.venv')
         }
     });
 
@@ -951,6 +964,7 @@ function startPythonService() {
 
         // Перезапускаем через 5 секунд только если это не было принудительное завершение
         if (code !== 0 && code !== null) {
+            console.log('Python сервис упал, перезапуск через 5 секунд...');
             setTimeout(() => {
                 if (!isPythonRunning) {
                     console.log('Перезапуск Python сервиса...');

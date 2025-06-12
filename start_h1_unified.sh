@@ -84,7 +84,23 @@ update_python_dependencies() {
         cd /home/unitree/control_robot/backend/src/services || warn "Не удалось перейти в директорию services"
         
         # Активируем виртуальное окружение
-        source /home/unitree/control_robot/backend/src/services/.venv/bin/activate || warn "Не удалось активировать виртуальное окружение"
+        source /home/unitree/control_robot/backend/src/services/.venv/bin/activate || {
+            warn "Не удалось активировать виртуальное окружение, создаем новое..."
+            cd /home/unitree/control_robot || warn "Не удалось вернуться в корневую директорию"
+            create_python_venv
+            return
+        }
+        
+        # Проверяем, что виртуальное окружение действительно активировано
+        if [ -z "$VIRTUAL_ENV" ]; then
+            warn "Виртуальное окружение не активировано, создаем новое..."
+            deactivate 2>/dev/null || true
+            cd /home/unitree/control_robot || warn "Не удалось вернуться в корневую директорию"
+            create_python_venv
+            return
+        fi
+        
+        info "Виртуальное окружение активировано: $VIRTUAL_ENV"
         
         # Быстрая проверка основных зависимостей без обновления
         if ! python -c "import flask, flask_cors, cv2, numpy" 2>/dev/null; then
@@ -444,10 +460,18 @@ create_python_venv() {
         
         # Сразу меняем права на виртуальное окружение
         chown -R unitree:unitree /home/unitree/control_robot/backend/src/services/.venv || error "Не удалось изменить права на виртуальное окружение"
+        chmod -R 755 /home/unitree/control_robot/backend/src/services/.venv || error "Не удалось установить права на виртуальное окружение"
         
         # Активируем виртуальное окружение и устанавливаем зависимости
         info "Активация виртуального окружения и установка зависимостей..."
         source /home/unitree/control_robot/backend/src/services/.venv/bin/activate || error "Не удалось активировать виртуальное окружение"
+        
+        # Проверяем, что виртуальное окружение действительно активировано
+        if [ -z "$VIRTUAL_ENV" ]; then
+            error "Виртуальное окружение не активировано после source activate"
+        fi
+        
+        info "Виртуальное окружение активировано: $VIRTUAL_ENV"
         
         # Обновляем pip только если нужно
         pip install --upgrade pip --timeout 15 --retries 5 || warn "Не удалось обновить pip"
@@ -462,6 +486,13 @@ create_python_venv() {
             # Устанавливаем основные зависимости для camera_service.py
             info "Установка основных Python зависимостей..."
             pip install flask flask-cors opencv-python numpy --timeout 15 --retries 5 || warn "Не удалось установить некоторые Python зависимости"
+        fi
+        
+        # Проверяем установку зависимостей
+        if python -c "import flask, flask_cors, cv2, numpy" 2>/dev/null; then
+            info "Все основные зависимости успешно установлены"
+        else
+            warn "Не все зависимости установлены корректно"
         fi
         
         # Деактивируем виртуальное окружение
@@ -482,24 +513,11 @@ main() {
     # Настройка маршрутизации для робота H1 (в самом начале)
     log "Настройка маршрутизации для робота H1..."
     sudo ip route add default via 192.168.123.1 2>/dev/null || warn "Маршрут уже существует или не удалось добавить"
+
+    update_from_git
     
-    # Проверяем аргументы командной строки
-    FORCE_UPDATE=false
-    if [ "$1" = "--update" ] || [ "$1" = "-u" ]; then
-        FORCE_UPDATE=true
-        info "Принудительное обновление включено"
-    fi
-    
-    # Обновление из git только если НЕ запущены через systemd или принудительное обновление
-    if [ -z "$SYSTEMD_EXEC_PID" ] || [ "$FORCE_UPDATE" = true ]; then
-        log "Обновляем из Git..."
-        update_from_git
-        
-        # Обновление Python зависимостей
-        update_python_dependencies
-    else
-        info "Запуск через systemd, пропускаем обновление из Git и Python зависимостей"
-    fi
+    # ВСЕГДА проверяем Python зависимости (даже при запуске через systemd)
+    update_python_dependencies
     
     # Проверка портов
     check_ports

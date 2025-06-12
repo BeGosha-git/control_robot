@@ -21,6 +21,8 @@ SyslogIdentifier=control_robot
 Environment=NODE_ENV=production
 Environment=HOME=/home/unitree
 Environment=SYSTEMD_EXEC_PID=1
+Environment=PYTHONPATH=/home/unitree/control_robot/backend/src/services
+Environment=PYTHONUNBUFFERED=1
 
 # Права доступа
 ReadWritePaths=/home/unitree

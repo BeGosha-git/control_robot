@@ -352,6 +352,33 @@ install_python_dependencies() {
     fi
 }
 
+# Функция для принудительной проверки виртуального окружения
+force_check_venv() {
+    log "Принудительная проверка виртуального окружения..."
+    
+    # Проверяем наличие виртуального окружения
+    if [ ! -d "/home/unitree/control_robot/backend/src/services/.venv" ] || [ ! -f "/home/unitree/control_robot/backend/src/services/.venv/bin/activate" ]; then
+        warn "Виртуальное окружение не найдено или повреждено, создаем новое..."
+        install_python_dependencies
+    else
+        info "Виртуальное окружение найдено, проверяем зависимости..."
+        
+        # Активируем виртуальное окружение
+        source /home/unitree/control_robot/backend/src/services/.venv/bin/activate || error "Не удалось активировать виртуальное окружение"
+        
+        # Проверяем зависимости
+        if ! python -c "import cv2, flask, flask_cors, numpy" 2>/dev/null; then
+            warn "Не все зависимости установлены, переустанавливаем..."
+            install_python_dependencies
+        else
+            info "Все зависимости установлены корректно"
+        fi
+        
+        # Деактивируем виртуальное окружение
+        deactivate
+    fi
+}
+
 # Основная логика
 main() {
     log "Установка и настройка системы H1..."
@@ -370,6 +397,9 @@ main() {
     
     # Установка Python зависимостей
     install_python_dependencies
+    
+    # Принудительная проверка виртуального окружения
+    force_check_venv
     
     # Настройка директорий и прав
     setup_directories_and_permissions

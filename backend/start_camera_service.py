@@ -75,6 +75,20 @@ def main():
     
     if os.path.exists(venv_python):
         print(f"Используется виртуальное окружение: {python_executable}")
+        # Проверяем, что виртуальное окружение работает
+        try:
+            result = subprocess.run([python_executable, "-c", "import sys; print('Python path:', sys.executable)"], 
+                                  capture_output=True, text=True, timeout=10)
+            if result.returncode == 0:
+                print(f"Виртуальное окружение работает: {result.stdout.strip()}")
+            else:
+                print(f"Проблема с виртуальным окружением: {result.stderr}")
+                python_executable = sys.executable
+                print(f"Переключаемся на системный Python: {python_executable}")
+        except Exception as e:
+            print(f"Ошибка проверки виртуального окружения: {e}")
+            python_executable = sys.executable
+            print(f"Переключаемся на системный Python: {python_executable}")
     else:
         print(f"Виртуальное окружение не найдено, используется системный Python: {python_executable}")
     
