@@ -131,125 +131,30 @@ check_and_install_nodejs() {
     
     # Проверяем наличие nvm
     if [ -d "/home/unitree/.nvm" ] && [ -f "/home/unitree/.nvm/nvm.sh" ]; then
-        info "Обнаружен nvm. Загрузка окружения..."
+        info "Обнаружен nvm. Использование nvm версии..."
         
-        # Проверяем активную версию node
-        NVM_NODE_VERSION=$(sudo -u unitree bash -c "source /home/unitree/.nvm/nvm.sh && nvm current" 2>/dev/null)
-        if [ -n "$NVM_NODE_VERSION" ] && [ "$NVM_NODE_VERSION" != "system" ]; then
-            info "Активная версия nvm: $NVM_NODE_VERSION"
+        # Используем nvm напрямую через sudo -u unitree
+        NODE_CMD="sudo -u unitree bash -c 'source /home/unitree/.nvm/nvm.sh && node'"
+        NPM_CMD="sudo -u unitree bash -c 'source /home/unitree/.nvm/nvm.sh && npm'"
+        
+        # Проверяем версии
+        NODE_VERSION=$(sudo -u unitree bash -c "source /home/unitree/.nvm/nvm.sh && node --version" 2>/dev/null)
+        NPM_VERSION=$(sudo -u unitree bash -c "source /home/unitree/.nvm/nvm.sh && npm --version" 2>/dev/null)
+        
+        if [ -n "$NODE_VERSION" ] && [ -n "$NPM_VERSION" ]; then
+            info "Node.js версия: $NODE_VERSION"
+            info "npm версия: $NPM_VERSION"
             
-            # Используем прямые пути к nvm версиям
-            NODE_CMD="sudo -u unitree /home/unitree/.nvm/versions/node/$NVM_NODE_VERSION/bin/node"
-            NPM_CMD="sudo -u unitree /home/unitree/.nvm/versions/node/$NVM_NODE_VERSION/bin/npm"
-            
-            # Проверяем, что файлы существуют
-            if [ -f "/home/unitree/.nvm/versions/node/$NVM_NODE_VERSION/bin/node" ] && [ -f "/home/unitree/.nvm/versions/node/$NVM_NODE_VERSION/bin/npm" ]; then
-                # Проверяем версии
-                NODE_VERSION=$($NODE_CMD --version 2>/dev/null)
-                NPM_VERSION=$($NPM_CMD --version 2>/dev/null)
-                
-                if [ -n "$NODE_VERSION" ] && [ -n "$NPM_VERSION" ]; then
-                    info "Node.js версия: $NODE_VERSION"
-                    info "npm версия: $NPM_VERSION"
-                    
-                    # Экспортируем команды для использования в других функциях
-                    export NPM_CMD="$NPM_CMD"
-                    export NODE_CMD="$NODE_CMD"
-                    return 0
-                fi
-            else
-                warn "Файлы nvm не найдены по пути"
-            fi
+            # Экспортируем команды для использования в других функциях
+            export NPM_CMD="$NPM_CMD"
+            export NODE_CMD="$NODE_CMD"
+            return 0
         else
-            warn "nvm не имеет активной версии или использует system"
+            error "Не удалось получить версии Node.js/npm из nvm"
         fi
-    fi
-    
-    # Если nvm не работает, проверяем стандартные установки
-    NPM_FOUND=false
-    
-    # Способ 1: Прямая проверка в текущем окружении
-    if command -v npm &> /dev/null; then
-        NPM_FOUND=true
-        NPM_CMD="npm"
-    fi
-    
-    # Способ 2: Проверка через пользователя unitree
-    if [ "$NPM_FOUND" = false ] && sudo -u unitree command -v npm &> /dev/null; then
-        NPM_FOUND=true
-        NPM_CMD="sudo -u unitree npm"
-    fi
-    
-    # Способ 3: Проверка в стандартных путях
-    if [ "$NPM_FOUND" = false ]; then
-        for path in "/usr/bin/npm" "/usr/local/bin/npm" "/opt/nodejs/bin/npm"; do
-            if [ -f "$path" ]; then
-                NPM_FOUND=true
-                NPM_CMD="$path"
-                break
-            fi
-        done
-    fi
-    
-    # Способ 4: Проверка через which в окружении unitree
-    if [ "$NPM_FOUND" = false ]; then
-        NPM_PATH=$(sudo -u unitree which npm 2>/dev/null)
-        if [ -n "$NPM_PATH" ]; then
-            NPM_FOUND=true
-            NPM_CMD="sudo -u unitree npm"
-        fi
-    fi
-    
-    if [ "$NPM_FOUND" = false ]; then
-        warn "npm не найден в стандартных местах. Попытка установки Node.js..."
-        
-        # Проверяем доступность интернета
-        if ! check_internet; then
-            error "npm не найден и нет подключения к интернету для установки Node.js"
-        fi
-        
-        info "Установка Node.js..."
-        curl -fsSL https://deb.nodesource.com/setup_18.x | bash - || error "Не удалось добавить репозиторий Node.js"
-        apt-get install -y nodejs || error "Не удалось установить Node.js"
-        
-        # После установки проверяем снова
-        if command -v npm &> /dev/null; then
-            NPM_FOUND=true
-            NPM_CMD="npm"
-        else
-            error "npm не установлен. Пожалуйста, установите Node.js с npm"
-        fi
-    fi
-    
-    # Проверяем node аналогично
-    NODE_FOUND=false
-    
-    if command -v node &> /dev/null; then
-        NODE_FOUND=true
-        NODE_CMD="node"
-    elif sudo -u unitree command -v node &> /dev/null; then
-        NODE_FOUND=true
-        NODE_CMD="sudo -u unitree node"
     else
-        for path in "/usr/bin/node" "/usr/local/bin/node" "/opt/nodejs/bin/node"; do
-            if [ -f "$path" ]; then
-                NODE_FOUND=true
-                NODE_CMD="$path"
-                break
-            fi
-        done
+        error "nvm не найден. Пожалуйста, установите nvm"
     fi
-    
-    if [ "$NODE_FOUND" = false ]; then
-        error "Node.js не найден. Пожалуйста, установите Node.js"
-    fi
-    
-    # Экспортируем команды для использования в других функциях
-    export NPM_CMD="$NPM_CMD"
-    export NODE_CMD="$NODE_CMD"
-    
-    info "Node.js версия: $($NODE_CMD --version)"
-    info "npm версия: $($NPM_CMD --version)"
 }
 
 # Функция для установки зависимостей backend
@@ -268,14 +173,8 @@ install_backend_dependencies() {
         
         # Используем найденную команду npm
         if [ -n "$NPM_CMD" ]; then
-            # Если используется nvm (проверяем по пути)
-            if [[ "$NPM_CMD" == *".nvm/versions/node"* ]]; then
-                info "Установка зависимостей через nvm..."
-                $NPM_CMD install || error "Не удалось установить зависимости backend"
-            else
-                info "Установка зависимостей через стандартный npm..."
-                $NPM_CMD install || error "Не удалось установить зависимости backend"
-            fi
+            info "Установка зависимостей через nvm..."
+            $NPM_CMD install || error "Не удалось установить зависимости backend"
         else
             error "Команда npm не найдена"
         fi
@@ -320,14 +219,8 @@ start_backend() {
     
     # Запуск backend в фоне с найденной командой node
     if [ -n "$NODE_CMD" ]; then
-        # Если используется nvm (проверяем по пути)
-        if [[ "$NODE_CMD" == *".nvm/versions/node"* ]]; then
-            info "Запуск backend через nvm..."
-            nohup $NODE_CMD server.js > /home/unitree/backend.log 2>&1 &
-        else
-            info "Запуск backend через стандартный node..."
-            nohup $NODE_CMD server.js > /home/unitree/backend.log 2>&1 &
-        fi
+        info "Запуск backend через nvm..."
+        nohup $NODE_CMD server.js > /home/unitree/backend.log 2>&1 &
     else
         error "Команда node не найдена"
     fi
