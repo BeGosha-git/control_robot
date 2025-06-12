@@ -165,28 +165,27 @@ check_and_install_nodejs() {
         if [ -n "$NVM_NODE_VERSION" ] && [ "$NVM_NODE_VERSION" != "system" ]; then
             info "Активная версия nvm: $NVM_NODE_VERSION"
             
-            # Создаем временные скрипты для node и npm
-            NODE_SCRIPT=$(create_nvm_script "node")
-            NPM_SCRIPT=$(create_nvm_script "npm")
+            # Используем прямые пути к nvm версиям
+            NODE_CMD="sudo -u unitree /home/unitree/.nvm/versions/node/$NVM_NODE_VERSION/bin/node"
+            NPM_CMD="sudo -u unitree /home/unitree/.nvm/versions/node/$NVM_NODE_VERSION/bin/npm"
             
-            # Используем временные скрипты
-            NODE_CMD="sudo -u unitree $NODE_SCRIPT"
-            NPM_CMD="sudo -u unitree $NPM_SCRIPT"
-            
-            # Проверяем версии
-            NODE_VERSION=$(sudo -u unitree bash -c "source /home/unitree/.nvm/nvm.sh && node --version" 2>/dev/null)
-            NPM_VERSION=$(sudo -u unitree bash -c "source /home/unitree/.nvm/nvm.sh && npm --version" 2>/dev/null)
-            
-            if [ -n "$NODE_VERSION" ] && [ -n "$NPM_VERSION" ]; then
-                info "Node.js версия: $NODE_VERSION"
-                info "npm версия: $NPM_VERSION"
+            # Проверяем, что файлы существуют
+            if [ -f "/home/unitree/.nvm/versions/node/$NVM_NODE_VERSION/bin/node" ] && [ -f "/home/unitree/.nvm/versions/node/$NVM_NODE_VERSION/bin/npm" ]; then
+                # Проверяем версии
+                NODE_VERSION=$($NODE_CMD --version 2>/dev/null)
+                NPM_VERSION=$($NPM_CMD --version 2>/dev/null)
                 
-                # Экспортируем команды для использования в других функциях
-                export NPM_CMD="$NPM_CMD"
-                export NODE_CMD="$NODE_CMD"
-                export NODE_SCRIPT="$NODE_SCRIPT"
-                export NPM_SCRIPT="$NPM_SCRIPT"
-                return 0
+                if [ -n "$NODE_VERSION" ] && [ -n "$NPM_VERSION" ]; then
+                    info "Node.js версия: $NODE_VERSION"
+                    info "npm версия: $NPM_VERSION"
+                    
+                    # Экспортируем команды для использования в других функциях
+                    export NPM_CMD="$NPM_CMD"
+                    export NODE_CMD="$NODE_CMD"
+                    return 0
+                fi
+            else
+                warn "Файлы nvm не найдены по пути"
             fi
         else
             warn "nvm не имеет активной версии или использует system"
