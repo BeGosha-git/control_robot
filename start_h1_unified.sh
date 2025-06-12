@@ -280,9 +280,16 @@ start_backend() {
 #!/bin/bash
 set -e
 
-# Настройка окружения
+# Настройка окружения для systemd
+export HOME="/home/unitree"
 export NVM_DIR="/home/unitree/.nvm"
-[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+export PATH="/home/unitree/.nvm/versions/node/v18.19.0/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+
+# Загружаем nvm если доступен
+if [ -s "$NVM_DIR/nvm.sh" ]; then
+    . "$NVM_DIR/nvm.sh"
+    nvm use 18 2>/dev/null || echo "nvm use 18 не удался, используем системный node"
+fi
 
 # Переходим в директорию backend
 cd /home/unitree/control_robot/backend
@@ -291,6 +298,13 @@ cd /home/unitree/control_robot/backend
 if [ ! -d "node_modules" ]; then
     echo "node_modules не найден, устанавливаем зависимости..."
     npm install
+fi
+
+# Проверяем, что node доступен
+if ! command -v node >/dev/null 2>&1; then
+    echo "ОШИБКА: node не найден в PATH"
+    echo "PATH: $PATH"
+    exit 1
 fi
 
 # Запускаем сервер

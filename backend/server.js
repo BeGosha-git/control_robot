@@ -962,23 +962,17 @@ function startPythonService() {
         console.log(`Python процесс завершен с кодом ${code}`);
         isPythonRunning = false;
 
-        // Перезапускаем через 5 секунд только если это не было принудительное завершение
-        if (code !== 0 && code !== null && !isShuttingDown) {
-            console.log('Python сервис упал, перезапуск через 5 секунд...');
-            setTimeout(() => {
-                if (!isPythonRunning && !isShuttingDown) {
-                    console.log('Перезапуск Python сервиса...');
-                    startPythonService();
-                }
-            }, 5000);
-        } else if (isShuttingDown) {
+        if (isShuttingDown) {
             console.log('Python сервис остановлен в рамках завершения работы сервера');
+        } else {
+            console.log('Python сервис завершился. Backend продолжает работать без камер.');
         }
     });
 
     pythonProcess.on('error', (error) => {
         console.error('Ошибка запуска Python процесса:', error);
         isPythonRunning = false;
+        console.log('Python сервис камер не запущен. Backend работает без камер.');
     });
 
     isPythonRunning = true;
