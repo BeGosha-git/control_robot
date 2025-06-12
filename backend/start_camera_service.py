@@ -64,12 +64,26 @@ def main():
     # Путь к сервису камер
     service_path = os.path.join(os.path.dirname(__file__), 'src', 'services', 'camera_service.py')
     
+    # Определяем путь к виртуальному окружению
+    venv_python = os.path.join(os.path.dirname(__file__), 'src', 'services', '.venv', 'bin', 'python')
+    if not os.path.exists(venv_python):
+        # Пробуем Windows путь
+        venv_python = os.path.join(os.path.dirname(__file__), 'src', 'services', '.venv', 'Scripts', 'python.exe')
+    
+    # Используем виртуальное окружение если оно существует, иначе системный Python
+    python_executable = venv_python if os.path.exists(venv_python) else sys.executable
+    
+    if os.path.exists(venv_python):
+        print(f"Используется виртуальное окружение: {python_executable}")
+    else:
+        print(f"Виртуальное окружение не найдено, используется системный Python: {python_executable}")
+    
     print("Запуск сервиса камер...")
     print(f"Путь к сервису: {service_path}")
     
     try:
         # Запускаем Python сервис
-        process = subprocess.Popen([sys.executable, service_path], 
+        process = subprocess.Popen([python_executable, service_path], 
                                  stdout=subprocess.PIPE, 
                                  stderr=subprocess.PIPE,
                                  text=True)

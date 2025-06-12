@@ -24,10 +24,24 @@ class SystemManager:
         if not service_path.exists():
             print(f"❌ Файл сервиса не найден: {service_path}")
             return False
+        
+        # Определяем путь к виртуальному окружению
+        venv_python = Path("backend/src/services/.venv/bin/python")
+        if not venv_python.exists():
+            # Пробуем Windows путь
+            venv_python = Path("backend/src/services/.venv/Scripts/python.exe")
+        
+        # Используем виртуальное окружение если оно существует, иначе системный Python
+        python_executable = str(venv_python) if venv_python.exists() else sys.executable
+        
+        if venv_python.exists():
+            print(f"✅ Используется виртуальное окружение: {python_executable}")
+        else:
+            print(f"⚠️ Виртуальное окружение не найдено, используется системный Python: {python_executable}")
             
         try:
             process = subprocess.Popen(
-                [sys.executable, str(service_path)],
+                [python_executable, str(service_path)],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True

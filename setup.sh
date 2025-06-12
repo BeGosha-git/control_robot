@@ -287,10 +287,11 @@ install_python_dependencies() {
             pip install --upgrade pip --timeout 15 --retries 5 || warn "Не удалось обновить pip"
             
             # Устанавливаем зависимости
-            if [ -f "/home/unitree/control_robot/backend/src/services/requirements.txt" ]; then
-                pip install -r /home/unitree/control_robot/backend/src/services/requirements.txt --timeout 15 --retries 5 || warn "Не удалось установить зависимости"
-            elif [ -f "/home/unitree/control_robot/backend/requirements.txt" ]; then
-                pip install -r /home/unitree/control_robot/backend/requirements.txt --timeout 15 --retries 5 || warn "Не удалось установить зависимости"
+            if [ -f "/home/unitree/control_robot/backend/requirements.txt" ]; then
+                pip install -r /home/unitree/control_robot/backend/requirements.txt --timeout 15 --retries 5 || {
+                    warn "Не удалось установить зависимости с фиксированными версиями, пробуем без версий..."
+                    pip install flask flask-cors opencv-python numpy --timeout 15 --retries 5 || warn "Не удалось установить зависимости"
+                }
             else
                 # Устанавливаем основные зависимости для camera_service.py
                 info "Установка основных Python зависимостей..."
@@ -331,10 +332,11 @@ install_python_dependencies() {
         pip install --upgrade pip --timeout 15 --retries 5 || warn "Не удалось обновить pip"
         
         # Устанавливаем зависимости
-        if [ -f "/home/unitree/control_robot/backend/src/services/requirements.txt" ]; then
-            pip install -r /home/unitree/control_robot/backend/src/services/requirements.txt --timeout 15 --retries 5 || warn "Не удалось установить зависимости"
-        elif [ -f "/home/unitree/control_robot/backend/requirements.txt" ]; then
-            pip install -r /home/unitree/control_robot/backend/requirements.txt --timeout 15 --retries 5 || warn "Не удалось установить зависимости"
+        if [ -f "/home/unitree/control_robot/backend/requirements.txt" ]; then
+            pip install -r /home/unitree/control_robot/backend/requirements.txt --timeout 15 --retries 5 || {
+                warn "Не удалось установить зависимости с фиксированными версиями, пробуем без версий..."
+                pip install flask flask-cors opencv-python numpy --timeout 15 --retries 5 || warn "Не удалось установить зависимости"
+            }
         else
             # Устанавливаем основные зависимости для camera_service.py
             info "Установка основных Python зависимостей..."
