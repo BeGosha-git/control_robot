@@ -9,14 +9,7 @@ NC='\033[0m' # No Color
 
 # Функция для очистки временных файлов
 cleanup_temp_files() {
-    if [ -n "$NODE_SCRIPT" ] && [ -f "$NODE_SCRIPT" ]; then
-        rm -f "$NODE_SCRIPT"
-    fi
-    
-    if [ -n "$NPM_SCRIPT" ] && [ -f "$NPM_SCRIPT" ]; then
-        rm -f "$NPM_SCRIPT"
-    fi
-    
+    # Удаляем другие временные файлы nvm (если есть)
     rm -f /tmp/nvm_*.sh 2>/dev/null || true
 }
 
@@ -130,26 +123,6 @@ update_from_git() {
     
     # Обновляем права на файлы
     chown -R unitree:unitree . || warn "Не удалось обновить владельца файлов"
-}
-
-# Функция для создания временного скрипта nvm
-create_nvm_script() {
-    local script_type="$1"
-    local temp_script="/tmp/nvm_${script_type}_$$.sh"
-    
-    cat > "$temp_script" << 'EOF'
-#!/bin/bash
-source /home/unitree/.nvm/nvm.sh
-EOF
-    
-    if [ "$script_type" = "node" ]; then
-        echo "node \"\$@\"" >> "$temp_script"
-    elif [ "$script_type" = "npm" ]; then
-        echo "npm \"\$@\"" >> "$temp_script"
-    fi
-    
-    chmod +x "$temp_script"
-    echo "$temp_script"
 }
 
 # Функция для проверки и установки Node.js
@@ -295,8 +268,8 @@ install_backend_dependencies() {
         
         # Используем найденную команду npm
         if [ -n "$NPM_CMD" ]; then
-            # Если используется nvm, убеждаемся что окружение загружено
-            if [[ "$NPM_CMD" == *"nvm.sh"* ]]; then
+            # Если используется nvm (проверяем по пути)
+            if [[ "$NPM_CMD" == *".nvm/versions/node"* ]]; then
                 info "Установка зависимостей через nvm..."
                 $NPM_CMD install || error "Не удалось установить зависимости backend"
             else
@@ -347,8 +320,8 @@ start_backend() {
     
     # Запуск backend в фоне с найденной командой node
     if [ -n "$NODE_CMD" ]; then
-        # Если используется nvm, убеждаемся что окружение загружено
-        if [[ "$NODE_CMD" == *"nvm.sh"* ]]; then
+        # Если используется nvm (проверяем по пути)
+        if [[ "$NODE_CMD" == *".nvm/versions/node"* ]]; then
             info "Запуск backend через nvm..."
             nohup $NODE_CMD server.js > /home/unitree/backend.log 2>&1 &
         else
