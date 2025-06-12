@@ -115,7 +115,43 @@ update_from_git() {
 check_and_install_nodejs() {
     log "Проверка Node.js..."
     
-    # Проверяем npm разными способами
+    # Проверяем наличие nvm
+    if [ -d "/home/unitree/.nvm" ] && [ -f "/home/unitree/.nvm/nvm.sh" ]; then
+        info "Обнаружен nvm. Загрузка окружения..."
+        
+        # Загружаем nvm окружение
+        export NVM_DIR="/home/unitree/.nvm"
+        [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+        [ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"
+        
+        # Проверяем активную версию node
+        NVM_NODE_VERSION=$(sudo -u unitree bash -c "source $NVM_DIR/nvm.sh && nvm current" 2>/dev/null)
+        if [ -n "$NVM_NODE_VERSION" ] && [ "$NVM_NODE_VERSION" != "system" ]; then
+            info "Активная версия nvm: $NVM_NODE_VERSION"
+            
+            # Используем nvm версию
+            NODE_CMD="sudo -u unitree bash -c 'source $NVM_DIR/nvm.sh && node'"
+            NPM_CMD="sudo -u unitree bash -c 'source $NVM_DIR/nvm.sh && npm'"
+            
+            # Проверяем версии
+            NODE_VERSION=$(sudo -u unitree bash -c "source $NVM_DIR/nvm.sh && node --version" 2>/dev/null)
+            NPM_VERSION=$(sudo -u unitree bash -c "source $NVM_DIR/nvm.sh && npm --version" 2>/dev/null)
+            
+            if [ -n "$NODE_VERSION" ] && [ -n "$NPM_VERSION" ]; then
+                info "Node.js версия: $NODE_VERSION"
+                info "npm версия: $NPM_VERSION"
+                
+                # Экспортируем команды для использования в других функциях
+                export NPM_CMD="$NPM_CMD"
+                export NODE_CMD="$NODE_CMD"
+                return 0
+            fi
+        else
+            warn "nvm не имеет активной версии или использует system"
+        fi
+    fi
+    
+    # Если nvm не работает, проверяем стандартные установки
     NPM_FOUND=false
     
     # Способ 1: Прямая проверка в текущем окружении
@@ -132,8 +168,8 @@ check_and_install_nodejs() {
     
     # Способ 3: Проверка в стандартных путях
     if [ "$NPM_FOUND" = false ]; then
-        for path in "/usr/bin/npm" "/usr/local/bin/npm" "/opt/nodejs/bin/npm" "/home/unitree/.nvm/versions/node/*/bin/npm"; do
-            if [ -f "$path" ] || ls $path >/dev/null 2>&1; then
+        for path in "/usr/bin/npm" "/usr/local/bin/npm" "/opt/nodejs/bin/npm"; do
+            if [ -f "$path" ]; then
                 NPM_FOUND=true
                 NPM_CMD="$path"
                 break
@@ -181,8 +217,8 @@ check_and_install_nodejs() {
         NODE_FOUND=true
         NODE_CMD="sudo -u unitree node"
     else
-        for path in "/usr/bin/node" "/usr/local/bin/node" "/opt/nodejs/bin/node" "/home/unitree/.nvm/versions/node/*/bin/node"; do
-            if [ -f "$path" ] || ls $path >/dev/null 2>&1; then
+        for path in "/usr/bin/node" "/usr/local/bin/node" "/opt/nodejs/bin/node"; do
+            if [ -f "$path" ]; then
                 NODE_FOUND=true
                 NODE_CMD="$path"
                 break
@@ -218,7 +254,14 @@ install_backend_dependencies() {
         
         # Используем найденную команду npm
         if [ -n "$NPM_CMD" ]; then
-            $NPM_CMD install || error "Не удалось установить зависимости backend"
+            # Если используется nvm, убеждаемся что окружение загружено
+            if [[ "$NPM_CMD" == *"nvm.sh"* ]]; then
+                info "Установка зависимостей через nvm..."
+                $NPM_CMD install || error "Не удалось установить зависимости backend"
+            else
+                info "Установка зависимостей через стандартный npm..."
+                $NPM_CMD install || error "Не удалось установить зависимости backend"
+            fi
         else
             error "Команда npm не найдена"
         fi
@@ -267,7 +310,14 @@ start_backend() {
     
     # Запуск backend в фоне с найденной командой node
     if [ -n "$NODE_CMD" ]; then
-        nohup $NODE_CMD server.js > /home/unitree/backend.log 2>&1 &
+        # Если используется nvm, убеждаемся что окружение загружено
+        if [[ "$NODE_CMD" == *"nvm.sh"* ]]; then
+            info "Запуск backend через nvm..."
+            nohup $NODE_CMD server.js > /home/unitree/backend.log 2>&1 &
+        else
+            info "Запуск backend через стандартный node..."
+            nohup $NODE_CMD server.js > /home/unitree/backend.log 2>&1 &
+        fi
     else
         error "Команда node не найдена"
     fi
