@@ -115,25 +115,91 @@ update_from_git() {
 check_and_install_nodejs() {
     log "Проверка Node.js..."
     
-    if ! command -v node &> /dev/null; then
-        warn "Node.js не установлен. Попытка установки..."
+    # Проверяем npm разными способами
+    NPM_FOUND=false
+    
+    # Способ 1: Прямая проверка в текущем окружении
+    if command -v npm &> /dev/null; then
+        NPM_FOUND=true
+        NPM_CMD="npm"
+    fi
+    
+    # Способ 2: Проверка через пользователя unitree
+    if [ "$NPM_FOUND" = false ] && sudo -u unitree command -v npm &> /dev/null; then
+        NPM_FOUND=true
+        NPM_CMD="sudo -u unitree npm"
+    fi
+    
+    # Способ 3: Проверка в стандартных путях
+    if [ "$NPM_FOUND" = false ]; then
+        for path in "/usr/bin/npm" "/usr/local/bin/npm" "/opt/nodejs/bin/npm" "/home/unitree/.nvm/versions/node/*/bin/npm"; do
+            if [ -f "$path" ] || ls $path >/dev/null 2>&1; then
+                NPM_FOUND=true
+                NPM_CMD="$path"
+                break
+            fi
+        done
+    fi
+    
+    # Способ 4: Проверка через which в окружении unitree
+    if [ "$NPM_FOUND" = false ]; then
+        NPM_PATH=$(sudo -u unitree which npm 2>/dev/null)
+        if [ -n "$NPM_PATH" ]; then
+            NPM_FOUND=true
+            NPM_CMD="sudo -u unitree npm"
+        fi
+    fi
+    
+    if [ "$NPM_FOUND" = false ]; then
+        warn "npm не найден в стандартных местах. Попытка установки Node.js..."
         
         # Проверяем доступность интернета
         if ! ping -c 1 deb.nodesource.com > /dev/null 2>&1; then
-            error "Node.js не установлен и нет подключения к интернету для установки"
+            error "npm не найден и нет подключения к интернету для установки Node.js"
         fi
         
         info "Установка Node.js..."
         curl -fsSL https://deb.nodesource.com/setup_18.x | bash - || error "Не удалось добавить репозиторий Node.js"
         apt-get install -y nodejs || error "Не удалось установить Node.js"
+        
+        # После установки проверяем снова
+        if command -v npm &> /dev/null; then
+            NPM_FOUND=true
+            NPM_CMD="npm"
+        else
+            error "npm не установлен. Пожалуйста, установите Node.js с npm"
+        fi
     fi
     
-    if ! command -v npm &> /dev/null; then
-        error "npm не установлен. Пожалуйста, установите Node.js с npm"
+    # Проверяем node аналогично
+    NODE_FOUND=false
+    
+    if command -v node &> /dev/null; then
+        NODE_FOUND=true
+        NODE_CMD="node"
+    elif sudo -u unitree command -v node &> /dev/null; then
+        NODE_FOUND=true
+        NODE_CMD="sudo -u unitree node"
+    else
+        for path in "/usr/bin/node" "/usr/local/bin/node" "/opt/nodejs/bin/node" "/home/unitree/.nvm/versions/node/*/bin/node"; do
+            if [ -f "$path" ] || ls $path >/dev/null 2>&1; then
+                NODE_FOUND=true
+                NODE_CMD="$path"
+                break
+            fi
+        done
     fi
     
-    info "Node.js версия: $(node --version)"
-    info "npm версия: $(npm --version)"
+    if [ "$NODE_FOUND" = false ]; then
+        error "Node.js не найден. Пожалуйста, установите Node.js"
+    fi
+    
+    # Экспортируем команды для использования в других функциях
+    export NPM_CMD="$NPM_CMD"
+    export NODE_CMD="$NODE_CMD"
+    
+    info "Node.js версия: $($NODE_CMD --version)"
+    info "npm версия: $($NPM_CMD --version)"
 }
 
 # Функция для установки зависимостей backend
@@ -150,7 +216,12 @@ install_backend_dependencies() {
             error "node_modules не найден и нет подключения к интернету для установки зависимостей"
         fi
         
-        npm install || error "Не удалось установить зависимости backend"
+        # Используем найденную команду npm
+        if [ -n "$NPM_CMD" ]; then
+            $NPM_CMD install || error "Не удалось установить зависимости backend"
+        else
+            error "Команда npm не найдена"
+        fi
     else
         info "Зависимости backend уже установлены"
     fi
@@ -194,8 +265,12 @@ start_backend() {
     log "Запуск backend..."
     cd backend || error "Не удалось перейти в директорию backend"
     
-    # Запуск backend в фоне
-    nohup node server.js > /home/unitree/backend.log 2>&1 &
+    # Запуск backend в фоне с найденной командой node
+    if [ -n "$NODE_CMD" ]; then
+        nohup $NODE_CMD server.js > /home/unitree/backend.log 2>&1 &
+    else
+        error "Команда node не найдена"
+    fi
     BACKEND_PID=$!
     echo $BACKEND_PID > /home/unitree/backend.pid
     
