@@ -145,8 +145,8 @@ update_python_dependencies() {
 update_from_git() {
     log "Проверка обновлений из Git..."
     
-    # Обновление из git только если НЕ запущены через systemd или принудительное обновление
-    if [ -z "$SYSTEMD_EXEC_PID" ] || [ "$FORCE_UPDATE" = true ]; then
+    # Обновление из git только если НЕ запущены через systemd
+    if [ -z "$SYSTEMD_EXEC_PID" ]; then
         # Проверяем доступность интернета
         if ! check_internet; then
             warn "Нет подключения к интернету. Пропускаем обновление из Git."
@@ -528,13 +528,6 @@ create_python_venv() {
 main() {
     log "Запуск единого скрипта H1..."
     
-    # Проверяем аргументы командной строки
-    FORCE_UPDATE=false
-    if [ "$1" = "--update" ] || [ "$1" = "-u" ]; then
-        FORCE_UPDATE=true
-        info "Принудительное обновление включено"
-    fi
-    
     # Устанавливаем права на скрипты в начале
     fix_script_permissions
     
@@ -575,7 +568,6 @@ main() {
     echo "Логи frontend: docker compose logs -f"
     echo "Остановка: ./stop_h1.sh"
     echo "Перезапуск: sudo ./start_h1_unified.sh"
-    echo "Обновление: sudo ./start_h1_unified.sh --update"
     echo -e "\n${YELLOW}Управление системным сервисом:${NC}"
     echo "Статус:    sudo systemctl status control_robot"
     echo "Логи:      sudo journalctl -u control_robot -f"
