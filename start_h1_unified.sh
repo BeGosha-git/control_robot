@@ -213,11 +213,15 @@ check_ports() {
 stop_existing_processes() {
     log "Остановка существующих процессов..."
     
-    # Остановка системного сервиса (если запущен)
-    if systemctl is-active control_robot.service > /dev/null 2>&1; then
-        info "Остановка системного сервиса..."
-        systemctl stop control_robot.service || warn "Не удалось остановить системный сервис"
-        sleep 2
+    # Остановка системного сервиса (только при ручном запуске)
+    if [ -z "$SYSTEMD_EXEC_PID" ]; then
+        if systemctl is-active control_robot.service > /dev/null 2>&1; then
+            info "Остановка системного сервиса..."
+            systemctl stop control_robot.service || warn "Не удалось остановить системный сервис"
+            sleep 2
+        fi
+    else
+        info "Автозапуск через systemd - пропускаем остановку системного сервиса"
     fi
     
     # Остановка Docker контейнеров
@@ -435,28 +439,6 @@ check_services() {
     fi
 }
 
-# Функция для запуска системного сервиса
-start_system_service() {
-    log "Запуск системного сервиса..."
-    
-    if systemctl is-active control_robot.service > /dev/null 2>&1; then
-        info "Системный сервис уже запущен"
-    else
-        info "Запуск системного сервиса..."
-        systemctl start control_robot.service || error "Не удалось запустить системный сервис"
-        
-        # Ждем немного для запуска
-        sleep 3
-        
-        # Проверяем статус
-        if systemctl is-active control_robot.service > /dev/null 2>&1; then
-            info "Системный сервис успешно запущен"
-        else
-            error "Системный сервис не запустился"
-        fi
-    fi
-}
-
 # Функция для создания виртуального окружения Python
 create_python_venv() {
     log "Создание виртуального окружения Python..."
@@ -557,9 +539,6 @@ main() {
     # Остановка существующих процессов
     stop_existing_processes
     
-    # Запуск системного сервиса
-    start_system_service
-
     # Запуск backend
     start_backend
     
@@ -579,13 +558,6 @@ main() {
     echo "Логи frontend: docker compose logs -f"
     echo "Остановка: ./stop_h1.sh"
     echo "Перезапуск: sudo ./start_h1_unified.sh"
-    echo -e "\n${YELLOW}Управление системным сервисом:${NC}"
-    echo "Статус:    sudo systemctl status control_robot"
-    echo "Логи:      sudo journalctl -u control_robot -f"
-    echo "Перезапуск: sudo systemctl restart control_robot"
-    echo "Остановка:  sudo systemctl stop control_robot"
-    echo "Автозапуск: sudo systemctl enable control_robot"
-    echo "Отключение: sudo systemctl disable control_robot"
 }
 
 # Запуск основной функции
