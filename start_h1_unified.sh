@@ -405,7 +405,7 @@ start_system_service() {
 
 # Функция для создания виртуального окружения Python
 create_python_venv() {
-    local venv_path="$BACKEND_DIR/src/services/.venv"
+    local venv_path="/home/unitree/control_robot/backend/src/services/.venv"
     
     log "Создание виртуального окружения Python..."
     
@@ -429,7 +429,7 @@ create_python_venv() {
         
         # Установка зависимостей
         log "Установка Python зависимостей..."
-        if "$venv_path/bin/pip" install -r "$BACKEND_DIR/requirements.txt"; then
+        if "$venv_path/bin/pip" install -r "/home/unitree/control_robot/backend/requirements.txt"; then
             info "Python зависимости установлены"
         else
             error "Не удалось установить Python зависимости"
