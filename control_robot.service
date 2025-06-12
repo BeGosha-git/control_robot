@@ -1,5 +1,5 @@
 [Unit]
-Description=H1 Robot Control Service
+Description=Control Robot Service
 After=network.target docker.service
 Wants=docker.service
 Requires=network.target
@@ -15,7 +15,7 @@ Restart=always
 RestartSec=10
 StandardOutput=journal
 StandardError=journal
-SyslogIdentifier=h1-control
+SyslogIdentifier=control_robot
 
 # Переменные окружения
 Environment=NODE_ENV=production
