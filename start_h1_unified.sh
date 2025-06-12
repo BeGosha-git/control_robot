@@ -57,40 +57,6 @@ else
     error "Этот скрипт должен быть запущен с правами root (sudo) или через systemd"
 fi
 
-# Проверка наличия Docker
-if ! command -v docker &> /dev/null; then
-    warn "Docker не установлен. Попытка установки..."
-    
-    # Проверяем доступность интернета
-    if ! check_internet; then
-        error "Docker не установлен и нет подключения к интернету для установки"
-    fi
-    
-    info "Установка Docker..."
-    curl -fsSL https://get.docker.com -o get-docker.sh
-    sh get-docker.sh || error "Не удалось установить Docker"
-    rm get-docker.sh
-fi
-
-# Проверка наличия Docker Compose
-if ! command -v docker compose &> /dev/null; then
-    warn "Docker Compose не установлен. Попытка установки..."
-    
-    # Проверяем доступность интернета
-    if ! check_internet; then
-        error "Docker Compose не установлен и нет подключения к интернету для установки"
-    fi
-    
-    info "Установка Docker Compose..."
-    curl -L "https://github.com/docker/compose/releases/download/v2.24.5/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
-    chmod +x /usr/local/bin/docker-compose || error "Не удалось установить Docker Compose"
-fi
-
-# Проверка прав доступа к Docker
-if ! docker info &> /dev/null; then
-    error "Нет прав доступа к Docker. Убедитесь, что ваш пользователь входит в группу docker."
-fi
-
 # Функция для обновления проекта из git
 update_from_git() {
     log "Проверка обновлений из Git..."
@@ -135,50 +101,6 @@ update_from_git() {
     if [ "$RUNNING_AS_ROOT" = true ]; then
         chown -R unitree:unitree . || warn "Не удалось обновить владельца файлов"
     fi
-}
-
-# Функция для проверки и установки Node.js
-check_and_install_nodejs() {
-    log "Проверка Node.js..."
-    
-    # Проверяем наличие nvm
-    if [ -d "/home/unitree/.nvm" ] && [ -f "/home/unitree/.nvm/nvm.sh" ]; then
-        info "Обнаружен nvm. Проверка версий..."
-        
-        # Проверяем версии в зависимости от того, кто запускает
-        if [ "$RUNNING_AS_ROOT" = true ]; then
-            info "Node.js версия: $(sudo -u unitree bash -c "source /home/unitree/.nvm/nvm.sh && node --version" 2>/dev/null)"
-            info "npm версия: $(sudo -u unitree bash -c "source /home/unitree/.nvm/nvm.sh && npm --version" 2>/dev/null)"
-        else
-            info "Node.js версия: $(bash -c "source /home/unitree/.nvm/nvm.sh && node --version" 2>/dev/null)"
-            info "npm версия: $(bash -c "source /home/unitree/.nvm/nvm.sh && npm --version" 2>/dev/null)"
-        fi
-    else
-        error "nvm не найден. Пожалуйста, установите nvm"
-    fi
-}
-
-# Функция для установки зависимостей backend
-install_backend_dependencies() {
-    log "Проверка зависимостей backend..."
-    cd backend || error "Не удалось перейти в директорию backend"
-    
-    # Проверяем наличие node_modules
-    if [ ! -d "node_modules" ]; then
-        warn "node_modules не найден. Установка зависимостей..."
-        
-        # Проверяем доступность интернета
-        if ! check_internet; then
-            error "node_modules не найден и нет подключения к интернету для установки зависимостей"
-        fi
-        
-        info "Установка зависимостей через nvm..."
-        sudo -u unitree bash -c "source /home/unitree/.nvm/nvm.sh && npm install" || error "Не удалось установить зависимости backend"
-    else
-        info "Зависимости backend уже установлены"
-    fi
-    
-    cd ..
 }
 
 # Функция для проверки портов
@@ -378,79 +300,6 @@ check_services() {
     fi
 }
 
-# Функция для установки системного сервиса
-install_system_service() {
-    log "Проверка системного сервиса..."
-    
-    # Проверяем наличие файла сервиса
-    if [ ! -f "control_robot.service" ]; then
-        warn "Файл сервиса control_robot.service не найден"
-        return 0
-    fi
-    
-    # Проверяем, установлен ли сервис
-    if [ -f "/etc/systemd/system/control_robot.service" ]; then
-        info "Системный сервис уже установлен"
-        
-        # Проверяем, есть ли изменения в файле сервиса
-        if ! cmp -s "control_robot.service" "/etc/systemd/system/control_robot.service"; then
-            info "Обнаружены изменения в файле сервиса. Обновление..."
-            
-            # Копируем новый файл сервиса
-            cp control_robot.service /etc/systemd/system/ || error "Не удалось скопировать файл сервиса"
-            chmod 644 /etc/systemd/system/control_robot.service || error "Не удалось установить права на файл сервиса"
-            
-            # Перезагружаем systemd
-            systemctl daemon-reload || error "Не удалось перезагрузить systemd"
-            
-            # Перезапускаем сервис если он запущен
-            if systemctl is-active control_robot.service > /dev/null 2>&1; then
-                info "Перезапуск сервиса..."
-                systemctl restart control_robot.service || warn "Не удалось перезапустить сервис"
-            fi
-            
-            info "Сервис обновлен"
-        else
-            info "Изменений в файле сервиса нет"
-        fi
-        
-        # Проверяем, включен ли автозапуск
-        if systemctl is-enabled control_robot.service > /dev/null 2>&1; then
-            info "Автозапуск сервиса уже включен"
-        else
-            info "Включение автозапуска сервиса..."
-            systemctl enable control_robot.service || warn "Не удалось включить автозапуск сервиса"
-        fi
-    else
-        info "Установка системного сервиса..."
-        
-        # Копируем файл сервиса
-        cp control_robot.service /etc/systemd/system/ || error "Не удалось скопировать файл сервиса"
-        chmod 644 /etc/systemd/system/control_robot.service || error "Не удалось установить права на файл сервиса"
-        
-        # Перезагружаем systemd
-        systemctl daemon-reload || error "Не удалось перезагрузить systemd"
-        
-        # Включаем автозапуск
-        systemctl enable control_robot.service || error "Не удалось включить сервис"
-        
-        info "Системный сервис установлен и включен"
-    fi
-    
-    # Создание и настройка лог-файла
-    if [ ! -f "/home/unitree/control_robot.log" ]; then
-        info "Создание лог-файла..."
-        touch /home/unitree/control_robot.log || error "Не удалось создать лог-файл"
-        chown unitree:unitree /home/unitree/control_robot.log || error "Не удалось изменить владельца лог-файла"
-        chmod 644 /home/unitree/control_robot.log || error "Не удалось установить права на лог-файл"
-    fi
-    
-    # Проверяем права на скрипты
-    info "Проверка прав на скрипты..."
-    chmod +x /home/unitree/control_robot/start_h1_unified.sh || warn "Не удалось установить права на start_h1_unified.sh"
-    chmod +x /home/unitree/control_robot/stop_h1.sh || warn "Не удалось установить права на stop_h1.sh"
-}
-
 # Функция для запуска системного сервиса
 start_system_service() {
     log "Запуск системного сервиса..."
@@ -484,33 +333,11 @@ main() {
     # Обновление из git
     update_from_git
     
-    # Проверка и установка Node.js
-    check_and_install_nodejs
-    
-    # Установка зависимостей backend
-    install_backend_dependencies
-    
     # Проверка портов
     check_ports
     
     # Остановка существующих процессов
     stop_existing_processes
-    
-    # Создание необходимых директорий
-    log "Создание необходимых директорий..."
-    mkdir -p backend/test_files
-    chmod 777 backend/test_files
-    
-    # Проверка доступа к камере
-    if [ -e /dev/video0 ]; then
-        log "Камера обнаружена"
-        chmod 666 /dev/video0 || warn "Не удалось установить права на камеру"
-    else
-        warn "Камера не обнаружена (/dev/video0)"
-    fi
-    
-    # Установка системного сервиса
-    install_system_service
     
     # Запуск системного сервиса
     start_system_service
@@ -525,7 +352,7 @@ main() {
     check_services
     
     # Финальное сообщение
-    log "Установка успешно завершена!"
+    log "Запуск успешно завершен!"
     echo -e "\n${GREEN}Приложение доступно по адресам:${NC}"
     echo "Frontend: http://localhost"
     echo "Backend API: http://localhost:3001"
