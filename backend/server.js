@@ -29,9 +29,17 @@ let lastInterrupt = false;
 let processStartTime = null;
 
 // Константы для путей и типов
-let ROOT_PATH = process.platform === 'win32' 
-  ? path.join(process.cwd(), 'test_files')
-  : '/home/unitree/control_robot/backend/test_files';
+function getTestFilesPath() {
+    if (process.platform === 'win32') {
+        // Windows разработка
+        return path.join(process.cwd(), 'test_files');
+    } else {
+        // Debian продакшен
+        return '/home/unitree/control_robot/backend/test_files';
+    }
+}
+
+let ROOT_PATH = getTestFilesPath();
 const ITEM_TYPES = {
   FILE: 'file',
   DIRECTORY: 'directory'
@@ -53,7 +61,7 @@ const DEFAULT_CONFIG = {
       command: '/home/unitree/unitree_sdk2/build/bin/H1_RESET_POSITION eth0'
     }
   ],
-  rootPath: '/home/unitree/control_robot/backend/test_files',
+  rootPath: getTestFilesPath(),
   RobotName: 'H-0000'
 };
 
@@ -711,24 +719,18 @@ async function initializeRootPath() {
       } catch (error) {
         console.error(`[${new Date().toLocaleTimeString()}] Ошибка доступа к ${normalizedPath}:`, error);
         // Если нет доступа к указанному пути, используем путь по умолчанию
-        ROOT_PATH = process.platform === 'win32'
-          ? path.join(process.cwd(), 'test_files')
-          : '/home/unitree/control_robot/backend/test_files';
+        ROOT_PATH = getTestFilesPath();
         await fs.mkdir(ROOT_PATH, { recursive: true });
       }
     } else {
       // Если путь не указан в конфиге, используем путь по умолчанию
-      ROOT_PATH = process.platform === 'win32'
-        ? path.join(process.cwd(), 'test_files')
-        : '/home/unitree/control_robot/backend/test_files';
+      ROOT_PATH = getTestFilesPath();
       await fs.mkdir(ROOT_PATH, { recursive: true });
     }
   } catch (error) {
     console.error(`[${new Date().toLocaleTimeString()}] Ошибка при инициализации корневого пути:`, error);
     // В случае ошибки используем путь по умолчанию
-    ROOT_PATH = process.platform === 'win32'
-      ? path.join(process.cwd(), 'test_files')
-      : '/home/unitree/control_robot/backend/test_files';
+    ROOT_PATH = getTestFilesPath();
     await fs.mkdir(ROOT_PATH, { recursive: true }).catch(console.error);
   }
 }
@@ -905,7 +907,16 @@ function startPythonService() {
     }
 
     const pythonPath = path.join(__dirname, 'src', 'services', 'camera_service.py');
-    const venvPython = path.join(__dirname, 'src', 'services', '.venv', 'bin', 'python');
+    
+    // Определяем путь к виртуальному окружению в зависимости от ОС
+    let venvPython;
+    if (process.platform === 'win32') {
+        // Windows
+        venvPython = path.join(__dirname, 'src', 'services', '.venv', 'Scripts', 'python.exe');
+    } else {
+        // Linux/Debian
+        venvPython = path.join(__dirname, 'src', 'services', '.venv', 'bin', 'python');
+    }
     
     console.log('Запуск Python сервиса камер...');
     
@@ -938,13 +949,16 @@ function startPythonService() {
         console.log(`Python процесс завершен с кодом ${code}`);
         isPythonRunning = false;
 
-        // Перезапускаем через 5 секунд
-        setTimeout(() => {
-            if (!isPythonRunning) {
-                startPythonService();
+        // Перезапускаем через 5 секунд только если это не было принудительное завершение
+        if (code !== 0 && code !== null) {
+            setTimeout(() => {
+                if (!isPythonRunning) {
+                    console.log('Перезапуск Python сервиса...');
+                    startPythonService();
                 }
-        }, 5000);
-            });
+            }, 5000);
+        }
+    });
 
     pythonProcess.on('error', (error) => {
         console.error('Ошибка запуска Python процесса:', error);
@@ -959,7 +973,18 @@ function startPythonService() {
 function stopPythonService() {
     if (pythonProcess && isPythonRunning) {
         console.log('Остановка Python сервиса...');
+        
+        // Сначала отправляем SIGTERM
         pythonProcess.kill('SIGTERM');
+        
+        // Ждем 3 секунды, затем принудительно завершаем
+        setTimeout(() => {
+            if (pythonProcess && !pythonProcess.killed) {
+                console.log('Принудительное завершение Python процесса...');
+                pythonProcess.kill('SIGKILL');
+            }
+        }, 3000);
+        
         isPythonRunning = false;
     }
 }
@@ -971,13 +996,17 @@ startPythonService();
 process.on('SIGINT', () => {
     console.log('Получен сигнал SIGINT, останавливаем сервер...');
     stopPythonService();
-    process.exit(0);
+    setTimeout(() => {
+        process.exit(0);
+    }, 1000);
 });
 
 process.on('SIGTERM', () => {
     console.log('Получен сигнал SIGTERM, останавливаем сервер...');
     stopPythonService();
-    process.exit(0);
+    setTimeout(() => {
+        process.exit(0);
+    }, 1000);
 });
 
 // API endpoints - проксируем к Python сервису
