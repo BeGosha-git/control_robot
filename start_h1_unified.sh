@@ -89,8 +89,8 @@ update_python_dependencies() {
         pip install --upgrade pip 2>/dev/null || warn "Не удалось обновить pip"
         
         # Обновляем зависимости
-        if [ -f "requirements.txt" ]; then
-            pip install -r requirements.txt --upgrade || warn "Не удалось обновить зависимости"
+        if [ -f "/home/unitree/control_robot/backend/requirements.txt" ]; then
+            pip install -r /home/unitree/control_robot/backend/requirements.txt --upgrade || warn "Не удалось обновить зависимости"
         fi
         
         # Деактивируем виртуальное окружение
@@ -421,12 +421,17 @@ create_python_venv() {
     # Удаление старого виртуального окружения если существует
     if [ -d "$venv_path" ]; then
         log "Удаление старого виртуального окружения..."
+        # Сначала меняем права, чтобы можно было удалить
+        chown -R unitree:unitree "$venv_path" 2>/dev/null || true
         rm -rf "$venv_path"
     fi
     
     # Создание нового виртуального окружения
     if python3 -m venv "$venv_path"; then
         info "Виртуальное окружение создано успешно"
+        
+        # Сразу меняем права на виртуальное окружение
+        chown -R unitree:unitree "$venv_path" || error "Не удалось изменить права на виртуальное окружение"
         
         # Установка зависимостей
         log "Установка Python зависимостей..."
