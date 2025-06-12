@@ -185,11 +185,7 @@ sudo systemctl restart control_robot
 sudo systemctl status control_robot
 ```
 
-### Быстрое исправление прав
-```bash
-# Использование скрипта для исправления прав
-sudo ./fix_permissions.sh
-```
+**Примечание:** Права на скрипты автоматически устанавливаются после каждого обновления из Git в `start_h1_unified.sh`.
 
 ## Автоматический запуск
 

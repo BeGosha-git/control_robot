@@ -57,6 +57,21 @@ else
     error "Этот скрипт должен быть запущен с правами root (sudo) или через systemd"
 fi
 
+# Функция для установки прав на скрипты
+fix_script_permissions() {
+    info "Установка прав на скрипты..."
+    
+    # Устанавливаем права на выполнение
+    chmod +x start_h1_unified.sh 2>/dev/null || warn "Не удалось установить права на start_h1_unified.sh"
+    chmod +x stop_h1.sh 2>/dev/null || warn "Не удалось установить права на stop_h1.sh"
+    chmod +x setup.sh 2>/dev/null || warn "Не удалось установить права на setup.sh"
+    
+    # Устанавливаем правильного владельца
+    chown unitree:unitree *.sh 2>/dev/null || warn "Не удалось изменить владельца скриптов"
+    
+    info "Права на скрипты установлены"
+}
+
 # Функция для обновления проекта из git
 update_from_git() {
     log "Проверка обновлений из Git..."
@@ -88,15 +103,7 @@ update_from_git() {
         git reset --hard origin/main || warn "Не удалось обновить локальные файлы"
         
         # После обновления из Git устанавливаем права на скрипты
-        info "Установка прав на обновленные скрипты..."
-        chmod +x start_h1_unified.sh 2>/dev/null || warn "Не удалось установить права на start_h1_unified.sh"
-        chmod +x stop_h1.sh 2>/dev/null || warn "Не удалось установить права на stop_h1.sh"
-        chmod +x setup.sh 2>/dev/null || warn "Не удалось установить права на setup.sh"
-        
-        # Устанавливаем правильного владельца
-        chown unitree:unitree *.sh 2>/dev/null || warn "Не удалось изменить владельца скриптов"
-        
-        info "Права на скрипты обновлены"
+        fix_script_permissions
     else
         warn "Не удалось получить обновления из репозитория"
     fi
@@ -137,8 +144,8 @@ check_ports() {
 stop_existing_processes() {
     log "Остановка существующих процессов..."
     
-    # Остановка системного сервиса (если запущен)
-    if systemctl is-active control_robot.service > /dev/null 2>&1; then
+    # Остановка системного сервиса (если запущен) - только если НЕ запущены через systemd
+    if [ -z "$SYSTEMD_EXEC_PID" ] && systemctl is-active control_robot.service > /dev/null 2>&1; then
         info "Остановка системного сервиса..."
         systemctl stop control_robot.service || warn "Не удалось остановить системный сервис"
         sleep 2
@@ -197,19 +204,35 @@ start_backend() {
     TEMP_SCRIPT="/tmp/start_backend_$$.sh"
     cat > "$TEMP_SCRIPT" << 'EOF'
 #!/bin/bash
-source /home/unitree/.nvm/nvm.sh
+set -e
+
+# Настройка окружения
+export NVM_DIR="/home/unitree/.nvm"
+[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+
+# Переходим в директорию backend
 cd /home/unitree/control_robot/backend
+
+# Проверяем наличие node_modules
+if [ ! -d "node_modules" ]; then
+    echo "node_modules не найден, устанавливаем зависимости..."
+    npm install
+fi
+
+# Запускаем сервер
+echo "Запуск Node.js сервера..."
 exec node server.js > /home/unitree/backend.log 2>&1
 EOF
     
     chmod +x "$TEMP_SCRIPT"
     
     # Запускаем через sudo -u unitree
+    info "Запуск backend процесса..."
     sudo -u unitree "$TEMP_SCRIPT" &
     BACKEND_PID=$!
     
     # Ждем немного для запуска
-    sleep 3
+    sleep 5
     
     # Проверяем, что процесс запущен и получаем его PID
     if kill -0 $BACKEND_PID 2>/dev/null; then
@@ -221,7 +244,13 @@ EOF
             error "Процесс запущен, но не является node server.js"
         fi
     else
-        error "Не удалось запустить backend"
+        # Проверяем логи для диагностики
+        if [ -f "/home/unitree/backend.log" ]; then
+            error "Не удалось запустить backend. Последние строки лога:"
+            tail -10 /home/unitree/backend.log
+        else
+            error "Не удалось запустить backend. Лог-файл не создан."
+        fi
     fi
     
     # Очищаем временный файл
