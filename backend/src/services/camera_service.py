@@ -7,6 +7,7 @@ import numpy as np
 from flask import Flask, Response, jsonify, request
 from flask_cors import CORS
 import logging
+import os
 
 # Настройка логирования
 logging.basicConfig(level=logging.INFO)
@@ -19,6 +20,20 @@ class CameraService:
         self.is_running = False
         self.frame_rate = 30
         self.resolution = (640, 480)
+        self.fallback_frame = None  # Белый фон для fallback
+        
+    def create_fallback_frame(self):
+        """Создание белого фона для fallback"""
+        if self.fallback_frame is None:
+            # Создаем белый кадр
+            white_frame = np.ones((self.resolution[1], self.resolution[0], 3), dtype=np.uint8) * 255
+            # Добавляем текст
+            cv2.putText(white_frame, "No Camera Available", (50, 240), 
+                       cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 0), 2)
+            # Конвертируем в JPEG
+            _, buffer = cv2.imencode('.jpg', white_frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
+            self.fallback_frame = base64.b64encode(buffer).decode('utf-8')
+        return self.fallback_frame
         
     def discover_cameras(self):
         """Обнаружение всех доступных камер"""
@@ -26,27 +41,31 @@ class CameraService:
         
         # Проверяем камеры с индексами от 0 до 9
         for i in range(10):
-            cap = cv2.VideoCapture(i)
-            if cap.isOpened():
-                ret, frame = cap.read()
-                if ret:
-                    # Получаем информацию о камере
-                    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-                    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-                    fps = cap.get(cv2.CAP_PROP_FPS)
+            try:
+                cap = cv2.VideoCapture(i)
+                if cap.isOpened():
+                    ret, frame = cap.read()
+                    if ret:
+                        # Получаем информацию о камере
+                        width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+                        height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+                        fps = cap.get(cv2.CAP_PROP_FPS)
+                        
+                        camera_info = {
+                            'id': i,
+                            'name': f'Камера {i}',
+                            'width': width,
+                            'height': height,
+                            'fps': fps,
+                            'is_active': False
+                        }
+                        available_cameras.append(camera_info)
+                        logger.info(f"Найдена камера {i}: {width}x{height} @ {fps}fps")
                     
-                    camera_info = {
-                        'id': i,
-                        'name': f'Камера {i}',
-                        'width': width,
-                        'height': height,
-                        'fps': fps,
-                        'is_active': False
-                    }
-                    available_cameras.append(camera_info)
-                    logger.info(f"Найдена камера {i}: {width}x{height} @ {fps}fps")
-                
-                cap.release()
+                    cap.release()
+            except Exception as e:
+                logger.warning(f"Ошибка при проверке камеры {i}: {e}")
+                continue
         
         return available_cameras
     
@@ -56,31 +75,35 @@ class CameraService:
             logger.warning(f"Камера {camera_id} уже запущена")
             return False
             
-        cap = cv2.VideoCapture(camera_id)
-        if not cap.isOpened():
-            logger.error(f"Не удалось открыть камеру {camera_id}")
+        try:
+            cap = cv2.VideoCapture(camera_id)
+            if not cap.isOpened():
+                logger.error(f"Не удалось открыть камеру {camera_id}")
+                return False
+            
+            # Настройка параметров камеры
+            cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.resolution[0])
+            cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.resolution[1])
+            cap.set(cv2.CAP_PROP_FPS, self.frame_rate)
+            
+            self.cameras[camera_id] = {
+                'capture': cap,
+                'is_active': True,
+                'last_frame': None,
+                'last_frame_time': 0
+            }
+            
+            # Запуск потока для чтения кадров
+            thread = threading.Thread(target=self._camera_worker, args=(camera_id,))
+            thread.daemon = True
+            thread.start()
+            self.camera_threads[camera_id] = thread
+            
+            logger.info(f"Запущен стрим с камеры {camera_id}")
+            return True
+        except Exception as e:
+            logger.error(f"Ошибка при запуске камеры {camera_id}: {e}")
             return False
-        
-        # Настройка параметров камеры
-        cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.resolution[0])
-        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.resolution[1])
-        cap.set(cv2.CAP_PROP_FPS, self.frame_rate)
-        
-        self.cameras[camera_id] = {
-            'capture': cap,
-            'is_active': True,
-            'last_frame': None,
-            'last_frame_time': 0
-        }
-        
-        # Запуск потока для чтения кадров
-        thread = threading.Thread(target=self._camera_worker, args=(camera_id,))
-        thread.daemon = True
-        thread.start()
-        self.camera_threads[camera_id] = thread
-        
-        logger.info(f"Запущен стрим с камеры {camera_id}")
-        return True
     
     def stop_camera_stream(self, camera_id):
         """Остановка стрима с камеры"""
@@ -151,6 +174,15 @@ class CameraService:
             if frame_data:
                 frames.append(frame_data)
         return frames
+    
+    def get_fallback_frame(self):
+        """Получение fallback кадра (белый фон)"""
+        return {
+            'camera_id': -1,
+            'frame': self.create_fallback_frame(),
+            'timestamp': time.time(),
+            'is_fallback': True
+        }
     
     def start_all_cameras(self):
         """Запуск всех доступных камер"""
@@ -226,12 +258,17 @@ def get_camera_frame(camera_id):
     if frame_data:
         return jsonify(frame_data)
     else:
-        return jsonify({'error': 'Камера не найдена или не активна'}), 404
+        # Возвращаем fallback кадр если камера не найдена
+        return jsonify(camera_service.get_fallback_frame())
 
 @app.route('/api/cameras/frames', methods=['GET'])
 def get_all_frames():
     """Получение кадров со всех активных камер"""
     frames = camera_service.get_all_frames()
+    if not frames:
+        # Если нет активных камер, возвращаем fallback кадр
+        frames = [camera_service.get_fallback_frame()]
+    
     return jsonify({
         'frames': frames,
         'count': len(frames),
@@ -263,28 +300,32 @@ def stream_frames():
     def generate():
         while True:
             frames = camera_service.get_all_frames()
-            if frames:
-                data = {
-                    'type': 'frames',
-                    'frames': frames,
-                    'timestamp': time.time()
-                }
-                yield f"data: {json.dumps(data)}\n\n"
-            else:
-                # Отправляем пустое сообщение для поддержания соединения
-                yield f"data: {json.dumps({'type': 'ping', 'timestamp': time.time()})}\n\n"
+            if not frames:
+                # Если нет активных камер, отправляем fallback кадр
+                frames = [camera_service.get_fallback_frame()]
+            
+            data = {
+                'type': 'frames',
+                'frames': frames,
+                'timestamp': time.time()
+            }
+            yield f"data: {json.dumps(data)}\n\n"
             
             time.sleep(1.0 / 30)  # 30 FPS
     
     return Response(generate(), mimetype='text/plain')
 
 if __name__ == '__main__':
+    # Создаем директорию test_files если её нет
+    test_files_dir = os.path.join(os.path.dirname(__file__), '..', '..', 'test_files')
+    os.makedirs(test_files_dir, exist_ok=True)
+    
     # Проверяем наличие доступных камер перед запуском
     available_cameras = camera_service.discover_cameras()
     
     if len(available_cameras) == 0:
-        logger.error("Нет доступных камер. Сервис запускается без автоматического старта камер.")
-        print("ВНИМАНИЕ: Сервис запущен, но нет доступных камер для автоматического старта.")
+        logger.warning("Нет доступных камер. Сервис запускается с fallback режимом.")
+        print("ВНИМАНИЕ: Сервис запущен в fallback режиме (белый фон).")
         print("   Используйте API для ручного управления камерами.")
     else:
         logger.info(f"Найдено {len(available_cameras)} камер. Запускаем все доступные камеры...")
