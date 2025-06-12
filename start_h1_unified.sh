@@ -89,7 +89,9 @@ update_python_dependencies() {
         pip install --upgrade pip 2>/dev/null || warn "Не удалось обновить pip"
         
         # Обновляем зависимости
-        if [ -f "/home/unitree/control_robot/backend/requirements.txt" ]; then
+        if [ -f "/home/unitree/control_robot/backend/src/services/requirements.txt" ]; then
+            pip install -r /home/unitree/control_robot/backend/src/services/requirements.txt --upgrade || warn "Не удалось обновить зависимости"
+        elif [ -f "/home/unitree/control_robot/backend/requirements.txt" ]; then
             pip install -r /home/unitree/control_robot/backend/requirements.txt --upgrade || warn "Не удалось обновить зависимости"
         fi
         
@@ -435,11 +437,33 @@ create_python_venv() {
         
         # Установка зависимостей
         log "Установка Python зависимостей..."
-        if "$venv_path/bin/pip" install -r "/home/unitree/control_robot/backend/requirements.txt"; then
-            info "Python зависимости установлены"
+        
+        # Проверяем наличие requirements.txt в services директории
+        if [ -f "/home/unitree/control_robot/backend/src/services/requirements.txt" ]; then
+            info "Найден requirements.txt в services, устанавливаем зависимости..."
+            if "$venv_path/bin/pip" install -r "/home/unitree/control_robot/backend/src/services/requirements.txt"; then
+                info "Python зависимости установлены"
+            else
+                error "Не удалось установить Python зависимости"
+                return 1
+            fi
+        elif [ -f "/home/unitree/control_robot/backend/requirements.txt" ]; then
+            info "Найден requirements.txt в backend, устанавливаем зависимости..."
+            if "$venv_path/bin/pip" install -r "/home/unitree/control_robot/backend/requirements.txt"; then
+                info "Python зависимости установлены"
+            else
+                error "Не удалось установить Python зависимости"
+                return 1
+            fi
         else
-            error "Не удалось установить Python зависимости"
-            return 1
+            # Устанавливаем основные зависимости для camera_service.py
+            info "Установка основных Python зависимостей..."
+            if "$venv_path/bin/pip" install flask flask-cors opencv-python numpy; then
+                info "Python зависимости установлены"
+            else
+                error "Не удалось установить Python зависимости"
+                return 1
+            fi
         fi
     else
         error "Не удалось создать виртуальное окружение"

@@ -263,11 +263,16 @@ install_python_dependencies() {
     # Удаляем старое виртуальное окружение если есть
     if [ -d "/home/unitree/control_robot/backend/src/services/.venv" ]; then
         info "Удаление старого виртуального окружения..."
+        # Сначала меняем права, чтобы можно было удалить
+        chown -R unitree:unitree /home/unitree/control_robot/backend/src/services/.venv 2>/dev/null || true
         rm -rf /home/unitree/control_robot/backend/src/services/.venv
     fi
     
     # Создаем новое виртуальное окружение
     python3 -m venv /home/unitree/control_robot/backend/src/services/.venv || error "Не удалось создать виртуальное окружение"
+    
+    # Сразу меняем права на виртуальное окружение
+    chown -R unitree:unitree /home/unitree/control_robot/backend/src/services/.venv || error "Не удалось изменить права на виртуальное окружение"
     
     # Активируем виртуальное окружение и устанавливаем зависимости
     info "Активация виртуального окружения и установка зависимостей..."
@@ -276,9 +281,12 @@ install_python_dependencies() {
     # Обновляем pip
     pip install --upgrade pip || warn "Не удалось обновить pip"
     
-    # Проверяем наличие requirements.txt
-    if [ -f "/home/unitree/control_robot/backend/requirements.txt" ]; then
-        info "Найден requirements.txt, устанавливаем зависимости..."
+    # Проверяем наличие requirements.txt в services директории
+    if [ -f "/home/unitree/control_robot/backend/src/services/requirements.txt" ]; then
+        info "Найден requirements.txt в services, устанавливаем зависимости..."
+        pip install -r /home/unitree/control_robot/backend/src/services/requirements.txt || warn "Не удалось установить зависимости из requirements.txt"
+    elif [ -f "/home/unitree/control_robot/backend/requirements.txt" ]; then
+        info "Найден requirements.txt в backend, устанавливаем зависимости..."
         pip install -r /home/unitree/control_robot/backend/requirements.txt || warn "Не удалось установить зависимости из requirements.txt"
     else
         # Устанавливаем основные зависимости для camera_service.py
@@ -288,9 +296,6 @@ install_python_dependencies() {
     
     # Деактивируем виртуальное окружение
     deactivate
-    
-    # Устанавливаем права на виртуальное окружение
-    chown -R unitree:unitree /home/unitree/control_robot/backend/src/services/.venv || warn "Не удалось изменить владельца виртуального окружения"
     
     info "Python зависимости установлены в виртуальном окружении"
 }
