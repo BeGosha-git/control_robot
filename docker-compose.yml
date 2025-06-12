@@ -7,15 +7,11 @@ services:
       dockerfile: Dockerfile
     ports:
       - "80:80"
-    volumes:
-      - ./frontend/build:/usr/share/nginx/html
-      - ./frontend/nginx.conf:/etc/nginx/conf.d/default.conf
-    environment:
-      - NODE_ENV=production
+    container_name: h1-frontend
     restart: unless-stopped
     networks:
-      - h1_network
+      - h1-network
 
 networks:
-  h1_network:
+  h1-network:
     driver: bridge 

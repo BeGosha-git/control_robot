@@ -1,179 +1,153 @@
-# Control Robot
+# H1 Robot Control - Единый скрипт запуска
 
-Веб-интерфейс для создания и редактирования файлов движений робота H1 с использованием Docker.
+## Описание
 
-## Функциональность
+Этот проект использует гибридную архитектуру:
+- **Backend**: Запускается напрямую на хосте с Node.js
+- **Frontend**: Запускается в Docker контейнере с nginx
 
-- 3D визуализация робота H1 с возможностью вращения и масштабирования
-- Блочный редактор кода для создания последовательности движений
-- Сохранение файлов движений в формате .cpp
-- Поддержка всех стандартных движений из шаблона
-- Контейнеризация с помощью Docker для простой установки и запуска
-- Системный сервис для автоматического запуска
+**Git репозиторий**: [https://github.com/BeGosha-git/control_robot](https://github.com/BeGosha-git/control_robot)
 
-## Требования
+## Быстрый запуск
 
-- Ubuntu 20.04 или новее
-- Доступ к камере (опционально)
-
-## Установка
-
-1. Клонируйте репозиторий:
 ```bash
-git clone https://github.com/BeGosha-git/control_robot.git
-cd control_robot
+sudo ./start_h1_unified.sh
 ```
 
-2. Запустите скрипт:
+## Что делает единый скрипт
+
+1. **Обновление из Git**: Получает последние изменения из репозитория [control_robot](https://github.com/BeGosha-git/control_robot), сохраняя `configs.conf`
+2. **Проверка зависимостей**: Устанавливает Docker, Docker Compose и Node.js если необходимо
+3. **Установка зависимостей**: Устанавливает npm пакеты для backend
+4. **Остановка процессов**: Останавливает все существующие процессы и контейнеры
+5. **Запуск backend**: Запускает Node.js сервер в фоне
+6. **Запуск frontend**: Собирает и запускает Docker контейнер с фронтендом
+7. **Проверка**: Проверяет доступность всех сервисов
+
+## Архитектура
+
+```
+┌─────────────────┐    ┌─────────────────┐
+│   Frontend      │    │    Backend      │
+│   (Docker)      │    │   (Node.js)     │
+│   Port: 80      │◄──►│   Port: 3001    │
+└─────────────────┘    └─────────────────┘
+```
+
+## Управление
+
+### Запуск
 ```bash
-chmod +x start_h1_control.sh
-sudo ./start_h1_control.sh
+sudo ./start_h1_unified.sh
 ```
 
-Скрипт автоматически:
-- Установит Docker и Docker Compose (если отсутствуют)
-- Настроит необходимые права доступа
-- Установит и запустит системный сервис
-- Запустит Docker контейнеры
-- Проверит доступ к камере
-
-Приложение будет доступно по адресам:
-- Frontend: http://localhost
-- Backend API: http://localhost:3001
-
-## Управление сервисом
-
-Проверка статуса:
+### Остановка
 ```bash
-sudo systemctl status control_robot
+./stop_h1.sh
 ```
 
-Просмотр логов:
+### Просмотр логов
 ```bash
-sudo journalctl -u control_robot -f
-```
+# Логи backend
+tail -f /home/unitree/backend.log
 
-Перезапуск сервиса:
-```bash
-sudo systemctl restart control_robot
-```
-
-Остановка сервиса:
-```bash
-sudo systemctl stop control_robot
-```
-
-Запуск сервиса:
-```bash
-sudo systemctl start control_robot
-```
-
-## Устранение неполадок
-
-1. Проверка логов сервиса:
-```bash
-sudo journalctl -u control_robot -f
-```
-
-2. Перезапуск сервиса:
-```bash
-sudo systemctl restart control_robot
-```
-
-3. Остановка и отключение сервиса:
-```bash
-sudo systemctl stop control_robot
-sudo systemctl disable control_robot
-sudo rm /etc/systemd/system/control_robot.service
-```
-
-4. Проверка статуса Docker контейнеров:
-```bash
-docker ps
-docker compose ps
-```
-
-5. Перезапуск контейнеров:
-```bash
-cd /home/unitree/control_robot
-docker compose down
-docker compose up -d
-```
-
-## Структура проекта
-
-```
-.
-├── frontend/              # React приложение
-│   ├── src/              # Исходный код
-│   ├── Dockerfile        # Конфигурация Docker для фронтенда
-│   └── nginx.conf        # Конфигурация Nginx
-├── backend/              # Node.js сервер
-│   ├── src/             # Исходный код
-│   ├── Dockerfile       # Конфигурация Docker для бэкенда
-│   └── package.json     # Зависимости Node.js
-├── docker compose.yml    # Конфигурация Docker Compose
-├── install.sh           # Скрипт установки
-├── start_h1.sh         # Скрипт запуска
-├── install_service.sh   # Скрипт установки системного сервиса
-└── README.md
-```
-
-## Разработка
-
-### Локальная разработка без Docker
-
-1. Запустите бэкенд:
-```bash
-cd backend
-npm install
-npm start
-```
-
-2. В отдельном терминале запустите фронтенд:
-```bash
-cd frontend
-npm install
-npm start
-```
-
-### Разработка с Docker
-
-1. Сборка и запуск контейнеров:
-```bash
-docker compose up --build
-```
-
-2. Просмотр логов:
-```bash
+# Логи frontend
 docker compose logs -f
 ```
 
-3. Остановка контейнеров:
+### Перезапуск
 ```bash
+sudo ./start_h1_unified.sh
+```
+
+## Доступ к приложению
+
+- **Frontend**: http://localhost
+- **Backend API**: http://localhost:3001
+
+## Требования
+
+- Linux система
+- Права root (sudo)
+- Интернет соединение для загрузки зависимостей
+- Git репозиторий: https://github.com/BeGosha-git/control_robot
+
+## Структура файлов
+
+```
+h1_site/
+├── start_h1_unified.sh    # Единый скрипт запуска
+├── stop_h1.sh             # Скрипт остановки
+├── docker-compose.yml     # Конфигурация Docker
+├── backend/
+│   ├── server.js          # Backend сервер
+│   ├── configs.conf       # Конфигурация (сохраняется при обновлении)
+│   └── package.json       # Зависимости backend
+├── frontend/
+│   ├── Dockerfile         # Docker образ для фронтенда
+│   ├── nginx.conf         # Конфигурация nginx
+│   └── package.json       # Зависимости frontend
+└── README_UNIFIED.md      # Эта документация
+```
+
+## Особенности
+
+- **Сохранение конфигурации**: `configs.conf` не перезаписывается при обновлении
+- **Автоматическая установка**: Все зависимости устанавливаются автоматически
+- **Гибридная архитектура**: Backend на хосте, frontend в контейнере
+- **Мониторинг**: Автоматическая проверка доступности сервисов
+- **Логирование**: Отдельные логи для backend и frontend
+- **Простое управление**: Один скрипт для запуска, один для остановки
+- **Автоматическая настройка Git**: Скрипт автоматически настраивает правильный remote origin
+
+## Устранение неполадок
+
+### Docker не запускается
+```bash
+sudo systemctl start docker
+sudo usermod -aG docker $USER
+```
+
+### Порт 80 занят
+```bash
+sudo netstat -tulpn | grep :80
+sudo kill -9 <PID>
+```
+
+### Backend не запускается
+```bash
+cd backend
+npm install
+node server.js
+```
+
+### Frontend контейнер не собирается
+```bash
+cd frontend
+docker build -t h1-frontend .
+```
+
+### Проблемы с Git репозиторием
+```bash
+# Проверка текущего remote
+git remote -v
+
+# Настройка правильного репозитория
+git remote set-url origin https://github.com/BeGosha-git/control_robot.git
+
+# Принудительное обновление
+git fetch origin
+git reset --hard origin/main
+```
+
+### Принудительная остановка всех процессов
+```bash
+# Остановка Docker контейнеров
 docker compose down
-```
 
-## Сетевая настройка
+# Поиск и остановка Node.js процессов
+pkill -f "node server.js"
 
-Для работы с роботом может потребоваться настройка маршрутизации:
-```bash
-sudo ip route add default via 192.168.123.1
-```
-
-## Лицензия
-
-MIT
-
----
-
-**Проект поддерживает кроссплатформенную работу (Windows, Linux) через Docker.**
-
-
-
-
-
-
-**НЬЮАНСЫ**
-
-sudo ip route add default via 192.168.123.1
+# Очистка PID файлов
+rm -f /home/unitree/backend.pid
+``` 

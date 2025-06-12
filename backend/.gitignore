@@ -1,12 +1,12 @@
 # Зависимости
-node_modules
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
+/node_modules
 
 # Логи
 logs
 *.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
 
 # Временные файлы
 /tmp
@@ -14,19 +14,6 @@ logs
 
 # Разное
 .DS_Store
-.env
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
-
-# IDE
-.idea
-.vscode
-*.swp
-*.swo
-
-# Разное
 .env
 .env.local
 .env.development.local

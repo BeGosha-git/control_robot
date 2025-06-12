@@ -1132,72 +1132,72 @@ app.post('/api/execute', async (req, res) => {
   }
 
   // Инициализируем состояние процесса
-  isProcessing = true;
-  currentCommand = command;
+    isProcessing = true;
+    currentCommand = command;
   lastCommand = command;
   lastResult = null;
   lastError = null;
-  lastInterrupt = false;
+    lastInterrupt = false;
   processStartTime = Date.now();
 
-  // Формируем команду для выполнения на хост-машине
-  const hostCommand = command;
-  
-  // Используем spawn для выполнения команды напрямую на хост-машине
-  const proc = spawn('/bin/bash', ['-c', command], {
+  const shell = process.platform === 'win32' ? 'cmd.exe' : '/bin/bash';
+  const fullCommand = process.platform === 'win32' ? `cmd.exe /c "${command}"` : `/bin/bash -c "${command}"`;
+
+  // Используем spawn вместо exec для лучшего контроля над процессом
+  const proc = spawn(shell, process.platform === 'win32' ? ['/c', command] : ['-c', command], {
     windowsHide: true,
-    detached: true
+    detached: process.platform !== 'win32' // На Linux создаем новую группу процессов
   });
 
-  currentProcess = proc;
-  currentProcessPid = proc.pid;
+    currentProcess = proc;
+    currentProcessPid = proc.pid;
 
-  let stdout = '';
-  let stderr = '';
+    let stdout = '';
+    let stderr = '';
 
-  proc.stdout.on('data', (data) => {
-    stdout += data.toString();
-  });
+    proc.stdout.on('data', (data) => {
+      stdout += data.toString();
+    });
 
-  proc.stderr.on('data', (data) => {
-    stderr += data.toString();
-  });
+    proc.stderr.on('data', (data) => {
+      stderr += data.toString();
+    });
 
-  proc.on('error', (error) => {
-    console.error(`[${new Date().toLocaleTimeString()}] Ошибка выполнения команды:`, error);
+    proc.on('error', (error) => {
+      console.error(`[${new Date().toLocaleTimeString()}] Ошибка выполнения команды:`, error);
     lastError = error.message;
-    if (!sentResponse) {
-      res.status(500).json({ 
-        error: 'Ошибка выполнения команды',
-        details: error.message
-      });
-      sentResponse = true;
-    }
-    cleanupProcess();
-  });
+      if (!sentResponse) {
+        res.status(500).json({ 
+          error: 'Ошибка выполнения команды',
+          details: error.message
+        });
+        sentResponse = true;
+      }
+      cleanupProcess();
+    });
 
-  proc.on('close', async (code, signal) => {
-    try {
-      if (signal) {
-        lastInterrupt = true;
+    proc.on('close', async (code, signal) => {
+      try {
+        if (signal) {
+          lastInterrupt = true;
         lastError = `Команда завершена сигналом: ${signal}`;
-        if (!sentResponse) {
-          res.json({ 
+          if (!sentResponse) {
+            res.json({ 
             error: lastError,
-            details: stderr
-          });
-          sentResponse = true;
-        }
+              details: stderr
+            });
+            sentResponse = true;
+          }
       } else if (code !== 0) {
-        console.error(`[${new Date().toLocaleTimeString()}] Ошибка выполнения команды ${command}:`, stderr);
+          console.error(`[${new Date().toLocaleTimeString()}] Ошибка выполнения команды ${command}:`, stderr);
         lastError = `Команда завершилась с кодом ${code}`;
-        if (!sentResponse) {
-          res.json({ 
+          if (!sentResponse) {
+            res.json({ 
             error: lastError,
-            details: stderr
-          });
-          sentResponse = true;
-        }
+              details: stderr
+            });
+            sentResponse = true;
+          }
       } else {
         lastResult = stdout;
         if (!sentResponse) {
@@ -1207,72 +1207,50 @@ app.post('/api/execute', async (req, res) => {
           });
           sentResponse = true;
         }
-      }
-    } catch (e) {
-      console.error('Ошибка в обработчике завершения процесса:', e);
+        }
+      } catch (e) {
+        console.error('Ошибка в обработчике завершения процесса:', e);
       lastError = e.message;
-      if (!sentResponse) {
-        res.status(500).json({ 
-          error: 'Ошибка в обработчике завершения процесса',
-          details: e.message
-        });
-        sentResponse = true;
-      }
+        if (!sentResponse) {
+          res.status(500).json({ 
+            error: 'Ошибка в обработчике завершения процесса',
+            details: e.message
+          });
+          sentResponse = true;
+        }
     } finally {
       await cleanupProcess();
-    }
-  });
+      }
+    });
 
-  // Отвязываем процесс от родительского
-  proc.unref();
+  // Отвязываем процесс от родительского (на Linux)
+  if (process.platform !== 'win32') {
+    proc.unref();
+  }
 });
 
 // Обновляем обработчик /api/interrupt
 app.post('/api/interrupt', async (req, res) => {
   if (isProcessing && currentProcessPid) {
     try {
-      // Отправляем сигнал процессу напрямую на хост-машине
-      const killCommand = `kill -15 ${currentProcessPid}`;
-      const proc = spawn('/bin/bash', ['-c', killCommand], {
-        windowsHide: true
-      });
+      const success = await processUtils.terminateProcess(currentProcessPid, false);
+      
+      if (!success) {
+        // Если не удалось корректно завершить, пробуем принудительно
+        await processUtils.terminateProcess(currentProcessPid, true);
+      }
 
-      proc.on('close', async (code) => {
-        if (code !== 0) {
-          // Если не удалось отправить SIGTERM, пробуем SIGKILL
-          const forceKillCommand = `kill -9 ${currentProcessPid}`;
-          const forceKillProc = spawn('/bin/bash', ['-c', forceKillCommand], {
-            windowsHide: true
-          });
-          
-          forceKillProc.on('close', () => {
-            isProcessing = false;
-            currentProcess = null;
-            currentProcessPid = null;
-            currentCommand = null;
-            lastInterrupt = true;
-            
-            console.log(`[${new Date().toLocaleTimeString()}] Команда принудительно прервана`);
-            return res.json({ 
-              success: true, 
-              message: 'Команда принудительно прервана',
-              platform: process.platform
-            });
-          });
-        } else {
-          isProcessing = false;
-          currentProcess = null;
-          currentProcessPid = null;
-          currentCommand = null;
-          lastInterrupt = true;
-          
-          console.log(`[${new Date().toLocaleTimeString()}] Команда прервана пользователем`);
-          return res.json({ 
-            success: true, 
-            message: 'Команда прервана',
-            platform: process.platform
-          });
-        }
+      isProcessing = false;
+      currentProcess = null;
+      currentProcessPid = null;
+      currentCommand = null;
+      lastInterrupt = true;
+      
+      console.log(`[${new Date().toLocaleTimeString()}] Команда прервана пользователем`);
+      return res.json({ 
+        success: true, 
+        message: 'Команда прервана',
+        platform: process.platform
       });
     } catch (error) {
       console.error(`[${new Date().toLocaleTimeString()}] Ошибка при прерывании команды:`, error);
@@ -1283,11 +1261,11 @@ app.post('/api/interrupt', async (req, res) => {
       });
     }
   }
-  return res.status(400).json({ 
-    error: 'Нет выполняемой команды',
-    isProcessing,
-    currentCommand
-  });
+    return res.status(400).json({ 
+      error: 'Нет выполняемой команды',
+      isProcessing,
+      currentCommand
+    });
 });
 
 // Чтение конфига
@@ -1708,7 +1686,7 @@ async function findFilesWithUpdateJointPositions(sdkPath) {
     });
     return [];
   }
-}
+    }
 
 // Добавляем новый эндпоинт для получения списка файлов с updateJointPositions
 app.get('/api/motion/valid-files', async (req, res) => {
