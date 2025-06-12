@@ -32,6 +32,13 @@ fi
 
 # Проверка наличия Docker
 if ! command -v docker &> /dev/null; then
+    warn "Docker не установлен. Попытка установки..."
+    
+    # Проверяем доступность интернета
+    if ! ping -c 1 get.docker.com > /dev/null 2>&1; then
+        error "Docker не установлен и нет подключения к интернету для установки"
+    fi
+    
     info "Установка Docker..."
     curl -fsSL https://get.docker.com -o get-docker.sh
     sh get-docker.sh || error "Не удалось установить Docker"
@@ -40,6 +47,13 @@ fi
 
 # Проверка наличия Docker Compose
 if ! command -v docker compose &> /dev/null; then
+    warn "Docker Compose не установлен. Попытка установки..."
+    
+    # Проверяем доступность интернета
+    if ! ping -c 1 github.com > /dev/null 2>&1; then
+        error "Docker Compose не установлен и нет подключения к интернету для установки"
+    fi
+    
     info "Установка Docker Compose..."
     curl -L "https://github.com/docker/compose/releases/download/v2.24.5/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
     chmod +x /usr/local/bin/docker-compose || error "Не удалось установить Docker Compose"
@@ -52,7 +66,13 @@ fi
 
 # Функция для обновления проекта из git
 update_from_git() {
-    log "Обновление проекта из git..."
+    log "Проверка обновлений из Git..."
+    
+    # Проверяем доступность интернета
+    if ! ping -c 1 github.com > /dev/null 2>&1; then
+        warn "Нет подключения к интернету. Пропускаем обновление из Git."
+        return 0
+    fi
     
     # Проверяем и настраиваем правильный remote origin
     CURRENT_REMOTE=$(git remote get-url origin 2>/dev/null || echo "")
@@ -63,7 +83,7 @@ update_from_git() {
         if [ -n "$CURRENT_REMOTE" ]; then
             git remote remove origin
         fi
-        git remote add origin "$CORRECT_REMOTE" || error "Не удалось добавить remote origin"
+        git remote add origin "$CORRECT_REMOTE" || warn "Не удалось добавить remote origin"
     fi
     
     # Сохраняем configs.conf если он существует
@@ -73,8 +93,12 @@ update_from_git() {
     fi
     
     # Получаем последние изменения
-    git fetch origin || error "Не удалось получить изменения из репозитория"
-    git reset --hard origin/main || error "Не удалось обновить локальные файлы"
+    if git fetch origin; then
+        info "Получены обновления из репозитория"
+        git reset --hard origin/main || warn "Не удалось обновить локальные файлы"
+    else
+        warn "Не удалось получить обновления из репозитория"
+    fi
     
     # Восстанавливаем configs.conf
     if [ -f "/tmp/configs.conf.backup" ]; then
@@ -92,6 +116,13 @@ check_and_install_nodejs() {
     log "Проверка Node.js..."
     
     if ! command -v node &> /dev/null; then
+        warn "Node.js не установлен. Попытка установки..."
+        
+        # Проверяем доступность интернета
+        if ! ping -c 1 deb.nodesource.com > /dev/null 2>&1; then
+            error "Node.js не установлен и нет подключения к интернету для установки"
+        fi
+        
         info "Установка Node.js..."
         curl -fsSL https://deb.nodesource.com/setup_18.x | bash - || error "Не удалось добавить репозиторий Node.js"
         apt-get install -y nodejs || error "Не удалось установить Node.js"
@@ -107,9 +138,23 @@ check_and_install_nodejs() {
 
 # Функция для установки зависимостей backend
 install_backend_dependencies() {
-    log "Установка зависимостей backend..."
+    log "Проверка зависимостей backend..."
     cd backend || error "Не удалось перейти в директорию backend"
-    npm install || error "Не удалось установить зависимости backend"
+    
+    # Проверяем наличие node_modules
+    if [ ! -d "node_modules" ]; then
+        warn "node_modules не найден. Установка зависимостей..."
+        
+        # Проверяем доступность интернета
+        if ! ping -c 1 registry.npmjs.org > /dev/null 2>&1; then
+            error "node_modules не найден и нет подключения к интернету для установки зависимостей"
+        fi
+        
+        npm install || error "Не удалось установить зависимости backend"
+    else
+        info "Зависимости backend уже установлены"
+    fi
+    
     cd ..
 }
 
@@ -164,11 +209,51 @@ start_backend() {
 start_frontend() {
     log "Запуск frontend в Docker..."
     
-    # Сборка и запуск контейнера
-    if docker compose up -d --build; then
-        info "Frontend контейнер запущен"
+    # Проверяем наличие образа
+    if docker images | grep -q "h1_site-frontend"; then
+        info "Docker образ найден"
+        
+        # Проверяем, были ли обновления из Git (если есть интернет)
+        if ping -c 1 github.com > /dev/null 2>&1; then
+            # Проверяем, есть ли изменения в frontend директории
+            if git status --porcelain frontend/ | grep -q .; then
+                info "Обнаружены изменения в frontend. Пересборка образа..."
+                
+                # Проверяем доступность интернета для загрузки образов
+                if ! ping -c 1 docker.io > /dev/null 2>&1; then
+                    warn "Нет интернета для пересборки. Запуск существующего образа..."
+                    docker compose up -d || error "Ошибка при запуске frontend контейнера"
+                else
+                    # Пересборка с --build
+                    if docker compose up -d --build; then
+                        info "Frontend контейнер пересобран и запущен"
+                    else
+                        error "Ошибка при пересборке frontend контейнера"
+                    fi
+                fi
+            else
+                info "Изменений в frontend нет. Запуск существующего образа..."
+                docker compose up -d || error "Ошибка при запуске frontend контейнера"
+            fi
+        else
+            # Нет интернета - запускаем существующий образ
+            info "Нет интернета. Запуск существующего образа..."
+            docker compose up -d || error "Ошибка при запуске frontend контейнера"
+        fi
     else
-        error "Ошибка при запуске frontend контейнера"
+        warn "Docker образ не найден. Попытка сборки..."
+        
+        # Проверяем доступность интернета для загрузки образов
+        if ! ping -c 1 docker.io > /dev/null 2>&1; then
+            error "Docker образ не найден и нет подключения к интернету для загрузки базовых образов"
+        fi
+        
+        # Сборка и запуск контейнера
+        if docker compose up -d --build; then
+            info "Frontend контейнер собран и запущен"
+        else
+            error "Ошибка при сборке и запуске frontend контейнера"
+        fi
     fi
     
     # Ждем немного для запуска
