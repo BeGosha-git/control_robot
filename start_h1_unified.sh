@@ -86,13 +86,13 @@ update_python_dependencies() {
         source /home/unitree/control_robot/backend/src/services/.venv/bin/activate || warn "Не удалось активировать виртуальное окружение"
         
         # Обновляем pip
-        pip install --upgrade pip --timeout 2 2>/dev/null || warn "Не удалось обновить pip"
+        pip install --upgrade pip --timeout 10 --retries 3 2>/dev/null || warn "Не удалось обновить pip"
         
         # Обновляем зависимости
         if [ -f "/home/unitree/control_robot/backend/src/services/requirements.txt" ]; then
-            pip install -r /home/unitree/control_robot/backend/src/services/requirements.txt --upgrade --timeout 2 || warn "Не удалось обновить зависимости"
+            pip install -r /home/unitree/control_robot/backend/src/services/requirements.txt --upgrade --timeout 10 --retries 3 || warn "Не удалось обновить зависимости"
         elif [ -f "/home/unitree/control_robot/backend/requirements.txt" ]; then
-            pip install -r /home/unitree/control_robot/backend/requirements.txt --upgrade --timeout 2 || warn "Не удалось обновить зависимости"
+            pip install -r /home/unitree/control_robot/backend/requirements.txt --upgrade --timeout 10 --retries 3 || warn "Не удалось обновить зависимости"
         fi
         
         # Деактивируем виртуальное окружение

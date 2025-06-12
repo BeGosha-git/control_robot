@@ -293,19 +293,19 @@ install_python_dependencies() {
         source /home/unitree/control_robot/backend/src/services/.venv/bin/activate || error "Не удалось активировать виртуальное окружение"
         
         # Обновляем pip
-        pip install --upgrade pip --timeout 2 || warn "Не удалось обновить pip"
+        pip install --upgrade pip --timeout 10 --retries 3 || warn "Не удалось обновить pip"
         
         # Проверяем наличие requirements.txt в services директории
         if [ -f "/home/unitree/control_robot/backend/src/services/requirements.txt" ]; then
             info "Найден requirements.txt в services, устанавливаем зависимости..."
-            pip install -r /home/unitree/control_robot/backend/src/services/requirements.txt --timeout 2 || warn "Не удалось установить зависимости из requirements.txt"
+            pip install -r /home/unitree/control_robot/backend/src/services/requirements.txt --timeout 10 --retries 3 || warn "Не удалось установить зависимости из requirements.txt"
         elif [ -f "/home/unitree/control_robot/backend/requirements.txt" ]; then
             info "Найден requirements.txt в backend, устанавливаем зависимости..."
-            pip install -r /home/unitree/control_robot/backend/requirements.txt --timeout 2 || warn "Не удалось установить зависимости из requirements.txt"
+            pip install -r /home/unitree/control_robot/backend/requirements.txt --timeout 10 --retries 3 || warn "Не удалось установить зависимости из requirements.txt"
         else
             # Устанавливаем основные зависимости для camera_service.py
             info "Установка основных Python зависимостей..."
-            pip install flask flask-cors opencv-python numpy --timeout 2 || warn "Не удалось установить некоторые Python зависимости"
+            pip install flask flask-cors opencv-python numpy --timeout 10 --retries 3 || warn "Не удалось установить некоторые Python зависимости"
         fi
         
         # Деактивируем виртуальное окружение
