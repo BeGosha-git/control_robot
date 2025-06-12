@@ -930,13 +930,13 @@ function startPythonService() {
     }
     
     // Создаем директорию test_files если её нет
-    const testFilesDir = path.join(__dirname, 'test_files');
+    const testFilesDir = getTestFilesPath();
     if (!require('fs').existsSync(testFilesDir)) {
         try {
             require('fs').mkdirSync(testFilesDir, { recursive: true });
-            console.log('Создана директория test_files');
+            console.log(`Создана директория test_files: ${testFilesDir}`);
         } catch (error) {
-            console.error('Ошибка создания директории test_files:', error);
+            console.error(`Ошибка создания директории test_files: ${error}`);
         }
     }
     
@@ -963,14 +963,16 @@ function startPythonService() {
         isPythonRunning = false;
 
         // Перезапускаем через 5 секунд только если это не было принудительное завершение
-        if (code !== 0 && code !== null) {
+        if (code !== 0 && code !== null && !isShuttingDown) {
             console.log('Python сервис упал, перезапуск через 5 секунд...');
             setTimeout(() => {
-                if (!isPythonRunning) {
+                if (!isPythonRunning && !isShuttingDown) {
                     console.log('Перезапуск Python сервиса...');
                     startPythonService();
                 }
             }, 5000);
+        } else if (isShuttingDown) {
+            console.log('Python сервис остановлен в рамках завершения работы сервера');
         }
     });
 
@@ -985,17 +987,25 @@ function startPythonService() {
 
 // Функция остановки Python сервиса
 function stopPythonService() {
-    if (pythonProcess && isPythonRunning) {
+    if (pythonProcess && isPythonRunning && !isShuttingDown) {
         console.log('Остановка Python сервиса...');
         
         // Сначала отправляем SIGTERM
-        pythonProcess.kill('SIGTERM');
+        try {
+            pythonProcess.kill('SIGTERM');
+        } catch (error) {
+            console.error('Ошибка при отправке SIGTERM:', error);
+        }
         
         // Ждем 3 секунды, затем принудительно завершаем
         setTimeout(() => {
-            if (pythonProcess && !pythonProcess.killed) {
+            if (pythonProcess && !pythonProcess.killed && !isShuttingDown) {
                 console.log('Принудительное завершение Python процесса...');
-                pythonProcess.kill('SIGKILL');
+                try {
+                    pythonProcess.kill('SIGKILL');
+                } catch (error) {
+                    console.error('Ошибка при отправке SIGKILL:', error);
+                }
             }
         }, 3000);
         
@@ -1007,7 +1017,11 @@ function stopPythonService() {
 startPythonService();
 
 // Graceful shutdown
+let isShuttingDown = false;
+
 process.on('SIGINT', () => {
+    if (isShuttingDown) return;
+    isShuttingDown = true;
     console.log('Получен сигнал SIGINT, останавливаем сервер...');
     stopPythonService();
     setTimeout(() => {
@@ -1016,11 +1030,34 @@ process.on('SIGINT', () => {
 });
 
 process.on('SIGTERM', () => {
+    if (isShuttingDown) return;
+    isShuttingDown = true;
     console.log('Получен сигнал SIGTERM, останавливаем сервер...');
     stopPythonService();
     setTimeout(() => {
         process.exit(0);
     }, 1000);
+});
+
+// Предотвращаем случайное завершение при ошибках
+process.on('uncaughtException', (error) => {
+    console.error('Необработанное исключение:', error);
+    if (!isShuttingDown) {
+        console.log('Перезапуск сервера через 5 секунд...');
+        setTimeout(() => {
+            process.exit(1);
+        }, 5000);
+    }
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+    console.error('Необработанное отклонение промиса:', reason);
+    if (!isShuttingDown) {
+        console.log('Перезапуск сервера через 5 секунд...');
+        setTimeout(() => {
+            process.exit(1);
+        }, 5000);
+    }
 });
 
 // API endpoints - проксируем к Python сервису

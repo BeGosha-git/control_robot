@@ -8,6 +8,8 @@ from flask import Flask, Response, jsonify, request
 from flask_cors import CORS
 import logging
 import os
+import signal
+import sys
 
 # Настройка логирования
 logging.basicConfig(level=logging.INFO)
@@ -199,8 +201,28 @@ class CameraService:
     def stop_all_cameras(self):
         """Остановка всех камер"""
         camera_ids = list(self.cameras.keys())
+        logger.info(f"Останавливаем {len(camera_ids)} камер...")
+        
         for camera_id in camera_ids:
-            self.stop_camera_stream(camera_id)
+            try:
+                self.stop_camera_stream(camera_id)
+            except Exception as e:
+                logger.error(f"Ошибка при остановке камеры {camera_id}: {e}")
+        
+        # Ждем завершения всех потоков
+        for thread_id, thread in list(self.camera_threads.items()):
+            try:
+                if thread.is_alive():
+                    thread.join(timeout=2.0)
+                    if thread.is_alive():
+                        logger.warning(f"Поток камеры {thread_id} не завершился в течение 2 секунд")
+            except Exception as e:
+                logger.error(f"Ошибка при ожидании завершения потока {thread_id}: {e}")
+        
+        # Очищаем словари
+        self.cameras.clear()
+        self.camera_threads.clear()
+        
         logger.info("Все камеры остановлены")
 
 # Создаем экземпляр сервиса
@@ -316,9 +338,29 @@ def stream_frames():
     return Response(generate(), mimetype='text/plain')
 
 if __name__ == '__main__':
+    # Обработчики сигналов для корректного завершения
+    def signal_handler(signum, frame):
+        print(f"\nПолучен сигнал {signum}, останавливаем сервер...")
+        try:
+            camera_service.stop_all_cameras()
+            print("Все камеры остановлены")
+        except Exception as e:
+            print(f"Ошибка при остановке камер: {e}")
+        finally:
+            print("Завершение работы сервиса")
+            sys.exit(0)
+    
+    # Регистрируем обработчики сигналов
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
+    
     # Создаем директорию test_files если её нет
     test_files_dir = os.path.join(os.path.dirname(__file__), '..', '..', 'test_files')
-    os.makedirs(test_files_dir, exist_ok=True)
+    try:
+        os.makedirs(test_files_dir, exist_ok=True)
+        print(f"Директория test_files готова: {test_files_dir}")
+    except Exception as e:
+        print(f"Ошибка создания директории test_files: {e}")
     
     # Проверяем наличие доступных камер перед запуском
     available_cameras = camera_service.discover_cameras()
@@ -336,4 +378,13 @@ if __name__ == '__main__':
     
     # Запускаем Flask сервер
     print("Запуск веб-сервера на http://localhost:5000")
-    app.run(host='0.0.0.0', port=5000, debug=False, threaded=True) 
+    try:
+        app.run(host='0.0.0.0', port=5000, debug=False, threaded=True)
+    except KeyboardInterrupt:
+        print("\nПолучен сигнал прерывания, останавливаем сервер...")
+        camera_service.stop_all_cameras()
+        sys.exit(0)
+    except Exception as e:
+        print(f"Ошибка запуска сервера: {e}")
+        camera_service.stop_all_cameras()
+        sys.exit(1) 

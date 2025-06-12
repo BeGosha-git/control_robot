@@ -80,54 +80,59 @@ update_python_dependencies() {
     if [ -d "/home/unitree/control_robot/backend/src/services/.venv" ] && [ -f "/home/unitree/control_robot/backend/src/services/.venv/bin/activate" ]; then
         info "Виртуальное окружение найдено, проверяем зависимости..."
         
-        # Переходим в директорию services
-        cd /home/unitree/control_robot/backend/src/services || warn "Не удалось перейти в директорию services"
+        # Проверяем права на виртуальное окружение
+        if [ ! -r "/home/unitree/control_robot/backend/src/services/.venv/bin/activate" ]; then
+            warn "Нет прав на чтение виртуального окружения, исправляем права..."
+            chown -R unitree:unitree /home/unitree/control_robot/backend/src/services/.venv 2>/dev/null || true
+            chmod -R 755 /home/unitree/control_robot/backend/src/services/.venv 2>/dev/null || true
+        fi
         
-        # Активируем виртуальное окружение
-        source /home/unitree/control_robot/backend/src/services/.venv/bin/activate || {
+        # Выполняем проверку и обновление зависимостей от unitree
+        sudo -u unitree bash -c "
+            cd /home/unitree/control_robot/backend/src/services
+            
+            # Активируем виртуальное окружение
+            source /home/unitree/control_robot/backend/src/services/.venv/bin/activate || exit 1
+            
+            # Проверяем, что виртуальное окружение действительно активировано
+            if [ -z \"\$VIRTUAL_ENV\" ]; then
+                echo 'Виртуальное окружение не активировано'
+                exit 1
+            fi
+            
+            echo 'Виртуальное окружение активировано: '\$VIRTUAL_ENV
+            
+            # Быстрая проверка основных зависимостей без обновления
+            if ! python -c 'import flask, flask_cors, cv2, numpy' 2>/dev/null; then
+                echo 'Не все зависимости установлены, устанавливаем...'
+                
+                # Обновляем pip только если нужно
+                pip install --upgrade pip --timeout 15 --retries 5 2>/dev/null || echo 'Не удалось обновить pip'
+                
+                # Устанавливаем зависимости без обновления (быстрее)
+                if [ -f '/home/unitree/control_robot/backend/requirements.txt' ]; then
+                    pip install -r /home/unitree/control_robot/backend/requirements.txt --timeout 15 --retries 5 || {
+                        echo 'Не удалось установить зависимости с фиксированными версиями, пробуем без версий...'
+                        pip install flask flask-cors opencv-python numpy --timeout 15 --retries 5 || echo 'Не удалось установить зависимости'
+                    }
+                else
+                    # Устанавливаем основные зависимости для camera_service.py
+                    echo 'Установка основных Python зависимостей...'
+                    pip install flask flask-cors opencv-python numpy --timeout 15 --retries 5 || echo 'Не удалось установить некоторые Python зависимости'
+                fi
+            else
+                echo 'Все основные зависимости уже установлены'
+            fi
+            
+            # Деактивируем виртуальное окружение
+            deactivate
+            
+            cd /home/unitree/control_robot
+        " || {
             warn "Не удалось активировать виртуальное окружение, создаем новое..."
-            cd /home/unitree/control_robot || warn "Не удалось вернуться в корневую директорию"
             create_python_venv
             return
         }
-        
-        # Проверяем, что виртуальное окружение действительно активировано
-        if [ -z "$VIRTUAL_ENV" ]; then
-            warn "Виртуальное окружение не активировано, создаем новое..."
-            deactivate 2>/dev/null || true
-            cd /home/unitree/control_robot || warn "Не удалось вернуться в корневую директорию"
-            create_python_venv
-            return
-        fi
-        
-        info "Виртуальное окружение активировано: $VIRTUAL_ENV"
-        
-        # Быстрая проверка основных зависимостей без обновления
-        if ! python -c "import flask, flask_cors, cv2, numpy" 2>/dev/null; then
-            info "Не все зависимости установлены, устанавливаем..."
-            
-            # Обновляем pip только если нужно
-            pip install --upgrade pip --timeout 15 --retries 5 2>/dev/null || warn "Не удалось обновить pip"
-            
-            # Устанавливаем зависимости без обновления (быстрее)
-            if [ -f "/home/unitree/control_robot/backend/requirements.txt" ]; then
-                pip install -r /home/unitree/control_robot/backend/requirements.txt --timeout 15 --retries 5 || {
-                    warn "Не удалось установить зависимости с фиксированными версиями, пробуем без версий..."
-                    pip install flask flask-cors opencv-python numpy --timeout 15 --retries 5 || warn "Не удалось установить зависимости"
-                }
-            else
-                # Устанавливаем основные зависимости для camera_service.py
-                info "Установка основных Python зависимостей..."
-                pip install flask flask-cors opencv-python numpy --timeout 15 --retries 5 || warn "Не удалось установить некоторые Python зависимости"
-            fi
-        else
-            info "Все основные зависимости уже установлены"
-        fi
-        
-        # Деактивируем виртуальное окружение
-        deactivate
-        
-        cd /home/unitree/control_robot || warn "Не удалось вернуться в корневую директорию"
         
         info "Python зависимости проверены"
     else
@@ -140,51 +145,53 @@ update_python_dependencies() {
 update_from_git() {
     log "Проверка обновлений из Git..."
     
-    # Проверяем доступность интернета
-    if ! check_internet; then
-        warn "Нет подключения к интернету. Пропускаем обновление из Git."
-        return 0
-    fi
-    
-    # Проверяем и настраиваем правильный remote origin
-    if [ "$(git remote get-url origin 2>/dev/null || echo "")" != "https://github.com/BeGosha-git/control_robot.git" ]; then
-        info "Настройка правильного Git репозитория..."
-        if [ -n "$(git remote get-url origin 2>/dev/null)" ]; then
-            git remote remove origin
+    # Обновление из git только если НЕ запущены через systemd или принудительное обновление
+    if [ -z "$SYSTEMD_EXEC_PID" ] || [ "$FORCE_UPDATE" = true ]; then
+        # Проверяем доступность интернета
+        if ! check_internet; then
+            warn "Нет подключения к интернету. Пропускаем обновление из Git."
+            return 0
         fi
-        git remote add origin "https://github.com/BeGosha-git/control_robot.git" || warn "Не удалось добавить remote origin"
-    fi
-    
-    # Сохраняем configs.conf если он существует
-    if [ -f "backend/configs.conf" ]; then
-        info "Сохранение configs.conf..."
-        cp backend/configs.conf /tmp/configs.conf.backup || warn "Не удалось сохранить configs.conf"
-    fi
-    
-    # Получаем последние изменения
-    if git fetch origin; then
-        info "Получены обновления из репозитория"
-        git reset --hard origin/main || warn "Не удалось обновить локальные файлы"
         
-        # После обновления из Git устанавливаем права на скрипты
-        fix_script_permissions
+        # Проверяем и настраиваем правильный remote origin
+        if [ "$(git remote get-url origin 2>/dev/null || echo "")" != "https://github.com/BeGosha-git/control_robot.git" ]; then
+            info "Настройка правильного Git репозитория..."
+            if [ -n "$(git remote get-url origin 2>/dev/null)" ]; then
+                git remote remove origin
+            fi
+            git remote add origin "https://github.com/BeGosha-git/control_robot.git" || warn "Не удалось добавить remote origin"
+        fi
         
-        # Обновление Python зависимостей
-        update_python_dependencies
+        # Сохраняем configs.conf если он существует
+        if [ -f "backend/configs.conf" ]; then
+            info "Сохранение configs.conf..."
+            cp backend/configs.conf /tmp/configs.conf.backup || warn "Не удалось сохранить configs.conf"
+        fi
+        
+        # Получаем последние изменения
+        if git fetch origin; then
+            info "Получены обновления из репозитория"
+            git reset --hard origin/main || warn "Не удалось обновить локальные файлы"
+            
+            # После обновления из Git устанавливаем права на скрипты
+            fix_script_permissions
+        else
+            warn "Не удалось получить обновления из репозитория"
+        fi
+        
+        # Восстанавливаем configs.conf
+        if [ -f "/tmp/configs.conf.backup" ]; then
+            info "Восстановление configs.conf..."
+            cp /tmp/configs.conf.backup backend/configs.conf || warn "Не удалось восстановить configs.conf"
+            rm /tmp/configs.conf.backup
+        fi
+        
+        # Обновляем права на файлы только если запущены от root
+        if [ "$RUNNING_AS_ROOT" = true ]; then
+            chown -R unitree:unitree . || warn "Не удалось обновить владельца файлов"
+        fi
     else
-        warn "Не удалось получить обновления из репозитория"
-    fi
-    
-    # Восстанавливаем configs.conf
-    if [ -f "/tmp/configs.conf.backup" ]; then
-        info "Восстановление configs.conf..."
-        cp /tmp/configs.conf.backup backend/configs.conf || warn "Не удалось восстановить configs.conf"
-        rm /tmp/configs.conf.backup
-    fi
-    
-    # Обновляем права на файлы только если запущены от root
-    if [ "$RUNNING_AS_ROOT" = true ]; then
-        chown -R unitree:unitree . || warn "Не удалось обновить владельца файлов"
+        info "Запуск через systemd, пропускаем обновление из Git"
     fi
 }
 
@@ -193,14 +200,14 @@ check_ports() {
     log "Проверка портов..."
     
     # Проверяем порт 3001 (backend)
-    if netstat -tuln 2>/dev/null | grep -q ":3001 "; then
+    if ss -tuln 2>/dev/null | grep -q ":3001 "; then
         warn "Порт 3001 уже занят. Возможно, старый backend все еще работает."
     else
         info "Порт 3001 свободен"
     fi
     
     # Проверяем порт 80 (frontend)
-    if netstat -tuln 2>/dev/null | grep -q ":80 "; then
+    if ss -tuln 2>/dev/null | grep -q ":80 "; then
         warn "Порт 80 уже занят. Возможно, старый frontend все еще работает."
     else
         info "Порт 80 свободен"
@@ -226,22 +233,22 @@ stop_existing_processes() {
     
     # Останавливаем процессы по PID файлу
     if [ -f "/home/unitree/backend.pid" ]; then
-        if kill -0 $(cat /home/unitree/backend.pid) 2>/dev/null; then
+        if sudo -u unitree kill -0 $(cat /home/unitree/backend.pid) 2>/dev/null; then
             info "Остановка backend процесса (PID: $(cat /home/unitree/backend.pid))..."
-            kill $(cat /home/unitree/backend.pid)
+            sudo -u unitree kill $(cat /home/unitree/backend.pid)
             sleep 2
-            kill -9 $(cat /home/unitree/backend.pid) 2>/dev/null || true
+            sudo -u unitree kill -9 $(cat /home/unitree/backend.pid) 2>/dev/null || true
         fi
         rm -f /home/unitree/backend.pid
     fi
     
     # Останавливаем все процессы node server.js (на случай если PID файл устарел)
-    PIDS=$(pgrep -f "node server.js" 2>/dev/null || true)
+    PIDS=$(sudo -u unitree pgrep -f "node server.js" 2>/dev/null || true)
     if [ -n "$PIDS" ]; then
         info "Остановка дополнительных backend процессов: $PIDS"
-        echo "$PIDS" | xargs kill 2>/dev/null || true
+        echo "$PIDS" | xargs -r sudo -u unitree kill 2>/dev/null || true
         sleep 2
-        echo "$PIDS" | xargs kill -9 2>/dev/null || true
+        echo "$PIDS" | xargs -r sudo -u unitree kill -9 2>/dev/null || true
     fi
     
     # Очищаем временные файлы
@@ -258,9 +265,9 @@ start_backend() {
     cd backend || error "Не удалось перейти в директорию backend"
     
     # Проверяем, не запущен ли уже backend
-    if [ -n "$(pgrep -f "node server.js" 2>/dev/null)" ]; then
+    if [ -n "$(sudo -u unitree pgrep -f "node server.js" 2>/dev/null)" ]; then
         warn "Backend уже запущен. Остановка старого процесса..."
-        pkill -f "node server.js" 2>/dev/null || true
+        sudo -u unitree pkill -f "node server.js" 2>/dev/null || true
         sleep 2
     fi
     
@@ -304,7 +311,7 @@ EOF
     # Проверяем, что процесс запущен и получаем его PID
     if kill -0 $BACKEND_PID 2>/dev/null; then
         # Проверяем, что это действительно наш процесс node server.js
-        if pgrep -f "node server.js" | grep -q "$BACKEND_PID"; then
+        if sudo -u unitree pgrep -f "node server.js" | grep -q "$BACKEND_PID"; then
             echo $BACKEND_PID > /home/unitree/backend.pid
             info "Backend запущен (PID: $BACKEND_PID)"
         else
@@ -334,8 +341,8 @@ start_frontend() {
     if docker images | grep -q "h1_site-frontend"; then
         info "Docker образ найден"
         
-        # Проверяем, были ли обновления из Git (если есть интернет)
-        if check_internet; then
+        # Проверяем, были ли обновления из Git (если есть интернет и НЕ запущены через systemd)
+        if check_internet && [ -z "$SYSTEMD_EXEC_PID" ]; then
             # Проверяем, есть ли изменения в frontend директории
             if git status --porcelain frontend/ | grep -q .; then
                 info "Обнаружены изменения в frontend. Пересборка образа..."
@@ -357,8 +364,12 @@ start_frontend() {
                 docker compose up -d || error "Ошибка при запуске frontend контейнера"
             fi
         else
-            # Нет интернета - запускаем существующий образ
-            info "Нет интернета. Запуск существующего образа..."
+            # Нет интернета или запуск через systemd - запускаем существующий образ
+            if [ -n "$SYSTEMD_EXEC_PID" ]; then
+                info "Запуск через systemd. Запуск существующего образа..."
+            else
+                info "Нет интернета. Запуск существующего образа..."
+            fi
             docker compose up -d || error "Ошибка при запуске frontend контейнера"
         fi
     else
@@ -453,6 +464,9 @@ create_python_venv() {
         rm -rf /home/unitree/control_robot/backend/src/services/.venv
     fi
     
+    # Создаем директорию services если её нет
+    mkdir -p /home/unitree/control_robot/backend/src/services || error "Не удалось создать директорию services"
+    
     # Создаем новое виртуальное окружение
     info "Создание виртуального окружения..."
     if python3 -m venv /home/unitree/control_robot/backend/src/services/.venv; then
@@ -462,43 +476,47 @@ create_python_venv() {
         chown -R unitree:unitree /home/unitree/control_robot/backend/src/services/.venv || error "Не удалось изменить права на виртуальное окружение"
         chmod -R 755 /home/unitree/control_robot/backend/src/services/.venv || error "Не удалось установить права на виртуальное окружение"
         
-        # Активируем виртуальное окружение и устанавливаем зависимости
+        # Активируем виртуальное окружение и устанавливаем зависимости от unitree
         info "Активация виртуального окружения и установка зависимостей..."
-        source /home/unitree/control_robot/backend/src/services/.venv/bin/activate || error "Не удалось активировать виртуальное окружение"
-        
-        # Проверяем, что виртуальное окружение действительно активировано
-        if [ -z "$VIRTUAL_ENV" ]; then
-            error "Виртуальное окружение не активировано после source activate"
-        fi
-        
-        info "Виртуальное окружение активировано: $VIRTUAL_ENV"
-        
-        # Обновляем pip только если нужно
-        pip install --upgrade pip --timeout 15 --retries 5 || warn "Не удалось обновить pip"
-        
-        # Устанавливаем зависимости без обновления (быстрее)
-        if [ -f "/home/unitree/control_robot/backend/requirements.txt" ]; then
-            pip install -r /home/unitree/control_robot/backend/requirements.txt --timeout 15 --retries 5 || {
-                warn "Не удалось установить зависимости с фиксированными версиями, пробуем без версий..."
-                pip install flask flask-cors opencv-python numpy --timeout 15 --retries 5 || warn "Не удалось установить зависимости"
-            }
-        else
-            # Устанавливаем основные зависимости для camera_service.py
-            info "Установка основных Python зависимостей..."
-            pip install flask flask-cors opencv-python numpy --timeout 15 --retries 5 || warn "Не удалось установить некоторые Python зависимости"
-        fi
-        
-        # Проверяем установку зависимостей
-        if python -c "import flask, flask_cors, cv2, numpy" 2>/dev/null; then
-            info "Все основные зависимости успешно установлены"
-        else
-            warn "Не все зависимости установлены корректно"
-        fi
-        
-        # Деактивируем виртуальное окружение
-        deactivate
-        
-        cd /home/unitree/control_robot || warn "Не удалось вернуться в корневую директорию"
+        sudo -u unitree bash -c "
+            cd /home/unitree/control_robot/backend/src/services
+            source /home/unitree/control_robot/backend/src/services/.venv/bin/activate || exit 1
+            
+            # Проверяем, что виртуальное окружение действительно активировано
+            if [ -z \"\$VIRTUAL_ENV\" ]; then
+                echo 'Виртуальное окружение не активировано после source activate'
+                exit 1
+            fi
+            
+            echo 'Виртуальное окружение активировано: '\$VIRTUAL_ENV
+            
+            # Обновляем pip только если нужно
+            pip install --upgrade pip --timeout 15 --retries 5 2>/dev/null || echo 'Не удалось обновить pip'
+            
+            # Устанавливаем зависимости без обновления (быстрее)
+            if [ -f '/home/unitree/control_robot/backend/requirements.txt' ]; then
+                pip install -r /home/unitree/control_robot/backend/requirements.txt --timeout 15 --retries 5 || {
+                    echo 'Не удалось установить зависимости с фиксированными версиями, пробуем без версий...'
+                    pip install flask flask-cors opencv-python numpy --timeout 15 --retries 5 || echo 'Не удалось установить зависимости'
+                }
+            else
+                # Устанавливаем основные зависимости для camera_service.py
+                echo 'Установка основных Python зависимостей...'
+                pip install flask flask-cors opencv-python numpy --timeout 15 --retries 5 || echo 'Не удалось установить некоторые Python зависимости'
+            fi
+            
+            # Проверяем установку зависимостей
+            if python -c 'import flask, flask_cors, cv2, numpy' 2>/dev/null; then
+                echo 'Все основные зависимости успешно установлены'
+            else
+                echo 'Не все зависимости установлены корректно'
+            fi
+            
+            # Деактивируем виртуальное окружение
+            deactivate
+            
+            cd /home/unitree/control_robot
+        " || error "Не удалось активировать виртуальное окружение или установить зависимости"
         
         info "Виртуальное окружение создано и зависимости установлены"
     else
@@ -509,6 +527,16 @@ create_python_venv() {
 # Основная логика
 main() {
     log "Запуск единого скрипта H1..."
+    
+    # Проверяем аргументы командной строки
+    FORCE_UPDATE=false
+    if [ "$1" = "--update" ] || [ "$1" = "-u" ]; then
+        FORCE_UPDATE=true
+        info "Принудительное обновление включено"
+    fi
+    
+    # Устанавливаем права на скрипты в начале
+    fix_script_permissions
     
     # Настройка маршрутизации для робота H1 (в самом начале)
     log "Настройка маршрутизации для робота H1..."

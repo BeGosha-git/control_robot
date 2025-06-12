@@ -1,4 +1,5 @@
 # Зависимости
+/src/services/.venv
 /node_modules
 
 # Логи
