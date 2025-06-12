@@ -194,16 +194,31 @@ start_backend() {
     
     # Запуск backend в фоне через nvm
     info "Запуск backend через nvm..."
-    sudo -u unitree bash -c "source /home/unitree/.nvm/nvm.sh && nohup node server.js > /home/unitree/backend.log 2>&1 &" || error "Не удалось запустить backend"
+    
+    # Создаем временный скрипт для запуска
+    cat > /tmp/start_backend.sh << 'EOF'
+#!/bin/bash
+source /home/unitree/.nvm/nvm.sh
+cd /home/unitree/control_robot/backend
+exec node server.js > /home/unitree/backend.log 2>&1
+EOF
+    
+    chmod +x /tmp/start_backend.sh
+    
+    # Запускаем через sudo -u unitree
+    sudo -u unitree /tmp/start_backend.sh &
     
     # Получаем PID процесса
-    sleep 2
+    sleep 3
     if [ -n "$(pgrep -f "node server.js" | head -1)" ]; then
         echo $(pgrep -f "node server.js" | head -1) > /home/unitree/backend.pid
         info "Backend запущен (PID: $(cat /home/unitree/backend.pid))"
     else
         error "Не удалось запустить backend"
     fi
+    
+    # Очищаем временный файл
+    rm -f /tmp/start_backend.sh
     
     cd ..
 }
