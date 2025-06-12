@@ -1,0 +1,35 @@
+[Unit]
+Description=H1 Robot Control Service
+After=network.target docker.service
+Wants=docker.service
+Requires=network.target
+
+[Service]
+Type=simple
+User=unitree
+Group=unitree
+WorkingDirectory=/home/unitree
+ExecStart=/home/unitree/control_robot/start_h1_unified.sh
+ExecStop=/home/unitree/control_robot/stop_h1.sh
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=h1-control
+
+# Переменные окружения
+Environment=NODE_ENV=production
+Environment=HOME=/home/unitree
+
+# Права доступа
+ReadWritePaths=/home/unitree
+ReadWritePaths=/home/unitree/control_robot
+ReadWritePaths=/home/unitree/unitree_sdk2-main
+ReadWritePaths=/home/unitree/unitree_sdk2
+
+# Таймауты
+TimeoutStartSec=300
+TimeoutStopSec=60
+
+[Install]
+WantedBy=multi-user.target 

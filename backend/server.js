@@ -1,4 +1,5 @@
 const express = require('express');
+const http = require('http');
 const cors = require('cors');
 const { exec, spawn } = require('child_process');
 const fs = require('fs').promises;
@@ -6,9 +7,13 @@ const path = require('path');
 const multer = require('multer');
 const mime = require('mime-types');
 const archiver = require('archiver');
+const fetch = require('node-fetch');
+
 const app = express();
+const server = http.createServer(app);
 const port = 3001;
 
+// Middleware
 app.use(cors());
 app.use(express.json());
 
@@ -54,6 +59,24 @@ const DEFAULT_CONFIG = {
 
 // Создаем тестовую директорию при запуске сервера
 fs.mkdir(ROOT_PATH, { recursive: true }).catch(console.error);
+
+// Функции для работы с конфигом
+async function readConfig() {
+  try {
+    const data = await fs.readFile(CONFIG_PATH, 'utf8');
+    return JSON.parse(data);
+  } catch (e) {
+    if (e.code === 'ENOENT') {
+      await fs.writeFile(CONFIG_PATH, JSON.stringify(DEFAULT_CONFIG, null, 2), 'utf8');
+      return DEFAULT_CONFIG;
+    }
+    throw e;
+  }
+}
+
+async function writeConfig(config) {
+  await fs.writeFile(CONFIG_PATH, JSON.stringify(config, null, 2), 'utf8');
+}
 
 // Утилиты для работы с файловой системой
 const fsUtils = {
@@ -870,980 +893,182 @@ fsRouter.post('/zip', async (req, res) => {
 // Подключаем роутер файловой системы
 app.use('/api/fs', fsRouter);
 
-// Добавляем новые утилиты для работы с процессами
-const processUtils = {
-  // Проверка существования процесса и его дочерних процессов
-  isProcessRunning: async (pid) => {
-    try {
-      if (process.platform === 'win32') {
-        // На Windows используем tasklist для проверки основного процесса
-        const { exec } = require('child_process');
-        const isMainProcessRunning = await new Promise((resolve) => {
-          exec(`tasklist /FI "PID eq ${pid}"`, (error, stdout) => {
-            resolve(stdout.toLowerCase().includes(pid.toString()));
-          });
-        });
+// Переменные для управления Python процессом
+let pythonProcess = null;
+let isPythonRunning = false;
 
-        if (!isMainProcessRunning) return false;
-
-        // Проверяем дочерние процессы
-        const childPids = await processUtils.getChildProcesses(pid);
-        if (childPids.length === 0) return true;
-
-        // Проверяем каждый дочерний процесс
-        const childProcessesStatus = await Promise.all(
-          childPids.map(async (childPid) => {
-            return new Promise((resolve) => {
-              exec(`tasklist /FI "PID eq ${childPid}"`, (error, stdout) => {
-                resolve(stdout.toLowerCase().includes(childPid.toString()));
-              });
-            });
-          })
-        );
-
-        // Процесс считается активным, если основной процесс или хотя бы один дочерний процесс активен
-        return isMainProcessRunning || childProcessesStatus.some(status => status);
-      } else {
-        // На Linux используем ps для проверки процесса и его группы
-        const { exec } = require('child_process');
-        return new Promise((resolve) => {
-          exec(`ps -p ${pid} -o pid= || ps -p $(pgrep -P ${pid}) -o pid=`, (error, stdout) => {
-            resolve(stdout.trim().length > 0);
-          });
-        });
-      }
-    } catch (error) {
-      console.error(`[${new Date().toLocaleTimeString()}] Ошибка при проверке процесса ${pid}:`, error);
-      return false;
+// Функция запуска Python сервиса
+function startPythonService() {
+    if (isPythonRunning) {
+        console.log('Python сервис уже запущен');
+        return;
     }
-  },
 
-  // Получение дочерних процессов с улучшенной обработкой
-  getChildProcesses: async (pid) => {
-    try {
-    if (process.platform === 'win32') {
-      const { exec } = require('child_process');
-      return new Promise((resolve) => {
-          exec(`wmic process where (ParentProcessId=${pid}) get ProcessId /format:value`, (error, stdout) => {
-          const pids = stdout.split('\n')
-              .filter(line => line.includes('ProcessId='))
-              .map(line => parseInt(line.split('=')[1].trim()))
-            .filter(pid => !isNaN(pid));
-          resolve(pids);
-        });
-      });
-    } else {
-      const { exec } = require('child_process');
-      return new Promise((resolve) => {
-        exec(`ps --ppid ${pid} -o pid=`, (error, stdout) => {
-          const pids = stdout.split('\n')
-            .map(line => parseInt(line.trim()))
-            .filter(pid => !isNaN(pid));
-          resolve(pids);
-        });
-      });
-      }
-    } catch (error) {
-      console.error(`[${new Date().toLocaleTimeString()}] Ошибка при получении дочерних процессов ${pid}:`, error);
-      return [];
-    }
-  },
+    const pythonPath = path.join(__dirname, 'src', 'services', 'camera_service.py');
+    
+    console.log('Запуск Python сервиса камер...');
+    pythonProcess = spawn('python', [pythonPath], {
+        stdio: ['pipe', 'pipe', 'pipe']
+    });
 
-  // Улучшенное завершение процесса и его дочерних процессов
-  terminateProcess: async (pid, force = false) => {
-    try {
-      // Сначала проверяем, существует ли процесс
-      const isRunning = await processUtils.isProcessRunning(pid);
-      if (!isRunning) {
-        console.log(`[${new Date().toLocaleTimeString()}] Процесс ${pid} уже завершен`);
-        return true; // Возвращаем true, так как процесс уже завершен
-      }
+    pythonProcess.stdout.on('data', (data) => {
+        console.log(`Python stdout: ${data}`);
+    });
 
-      // Получаем все дочерние процессы
-      const childPids = await processUtils.getChildProcesses(pid);
-      const allPids = [pid, ...childPids];
-      
-      // Сначала пробуем корректно завершить все процессы
-      if (!force) {
-        for (const processPid of allPids) {
-        try {
-          if (process.platform === 'win32') {
-              process.kill(processPid, 'SIGTERM');
-          } else {
-              process.kill(-processPid, 'SIGTERM');
-          }
-        } catch (error) {
-            // Игнорируем ошибку ESRCH, так как процесс мог уже завершиться
-            if (error.code !== 'ESRCH') {
-              console.error(`[${new Date().toLocaleTimeString()}] Ошибка при отправке SIGTERM процессу ${processPid}:`, error);
-            }
-        }
-      }
+    pythonProcess.stderr.on('data', (data) => {
+        console.error(`Python stderr: ${data}`);
+    });
 
-      // Даем процессам время на корректное завершение
-        await new Promise(resolve => setTimeout(resolve, 2000));
+    pythonProcess.on('close', (code) => {
+        console.log(`Python процесс завершен с кодом ${code}`);
+        isPythonRunning = false;
 
-      // Проверяем, остались ли живые процессы
-        const stillRunning = await Promise.all(
-          allPids.map(async (processPid) => await processUtils.isProcessRunning(processPid))
-        );
-
-        // Если все процессы завершились, возвращаем успех
-        if (!stillRunning.some(running => running)) {
-          return true;
-        }
-        }
-        
-      // Если требуется принудительное завершение или процессы не завершились
-      for (const processPid of allPids) {
-            try {
-              if (process.platform === 'win32') {
-            const { exec } = require('child_process');
-            await new Promise((resolve) => {
-              exec(`taskkill /F /PID ${processPid}`, (error) => {
-                // Игнорируем ошибку, если процесс уже завершен
-                if (error && !error.message.includes('не найдены процессы')) {
-                  console.error(`[${new Date().toLocaleTimeString()}] Ошибка при принудительном завершении процесса ${processPid}:`, error);
+        // Перезапускаем через 5 секунд
+        setTimeout(() => {
+            if (!isPythonRunning) {
+                startPythonService();
                 }
-                resolve();
-              });
+        }, 5000);
             });
-              } else {
-            try {
-              process.kill(-processPid, 'SIGKILL');
-            } catch (error) {
-              // Игнорируем ошибку ESRCH
-              if (error.code !== 'ESRCH') {
-                throw error;
-              }
-            }
-          }
-        } catch (error) {
-          // Игнорируем ошибку ESRCH
-          if (error.code !== 'ESRCH') {
-            console.error(`[${new Date().toLocaleTimeString()}] Ошибка при принудительном завершении процесса ${processPid}:`, error);
-            }
-          }
-        }
 
-      // Даем время на завершение процессов
-      await new Promise(resolve => setTimeout(resolve, 1000));
-
-      // Финальная проверка
-      const finalCheck = await Promise.all(
-        allPids.map(async (processPid) => await processUtils.isProcessRunning(processPid))
-      );
-
-      return !finalCheck.some(running => running);
-    } catch (error) {
-      // Игнорируем ошибку ESRCH
-      if (error.code === 'ESRCH') {
-        return true;
-      }
-      console.error(`[${new Date().toLocaleTimeString()}] Ошибка при завершении процесса ${pid}:`, error);
-      return false;
-    }
-  }
-};
-
-// Обновляем функцию очистки процесса
-const cleanupProcess = async () => {
-  if (currentProcessPid) {
-    try {
-      // Пробуем корректно завершить процесс и его дочерние процессы
-      const success = await processUtils.terminateProcess(currentProcessPid, false);
-      
-      if (!success) {
-        // Если не удалось корректно завершить, пробуем принудительно
-        await processUtils.terminateProcess(currentProcessPid, true);
-      }
-    } catch (error) {
-      console.error(`[${new Date().toLocaleTimeString()}] Ошибка при очистке процесса:`, error);
-    }
-  }
-  
-  // Очищаем состояние
-  isProcessing = false;
-  currentProcess = null;
-  currentProcessPid = null;
-  currentCommand = null;
-  processStartTime = null;
-};
-
-// Обновляем эндпоинт для статуса выполнения команд
-app.get('/api/status', async (req, res) => {
-  try {
-    // Проверяем, действительно ли процесс все еще запущен
-    if (isProcessing && currentProcessPid) {
-      const isRunning = await processUtils.isProcessRunning(currentProcessPid);
-      if (!isRunning) {
-        console.log(`[${new Date().toLocaleTimeString()}] Процесс ${currentProcessPid} завершился некорректно`);
-        await cleanupProcess();
-      }
-    }
-
-    // Вычисляем время выполнения, если процесс активен
-    let executionTime = null;
-    if (isProcessing && processStartTime) {
-      executionTime = Math.floor((Date.now() - processStartTime) / 1000);
-    }
-
-    res.json({
-      isProcessing,
-      currentCommand,
-      lastCommand,
-      lastResult,
-      lastError,
-      lastInterrupt,
-      executionTime,
-      processPid: currentProcessPid
+    pythonProcess.on('error', (error) => {
+        console.error('Ошибка запуска Python процесса:', error);
+        isPythonRunning = false;
     });
-  } catch (error) {
-    console.error(`[${new Date().toLocaleTimeString()}] Ошибка при получении статуса:`, error);
-    res.status(500).json({
-      error: 'Ошибка при получении статуса',
-      details: error.message
-    });
-  }
+
+    isPythonRunning = true;
+    console.log('Python сервис камер запущен');
+}
+
+// Функция остановки Python сервиса
+function stopPythonService() {
+    if (pythonProcess && isPythonRunning) {
+        console.log('Остановка Python сервиса...');
+        pythonProcess.kill('SIGTERM');
+        isPythonRunning = false;
+    }
+}
+
+// Запускаем Python сервис при старте
+startPythonService();
+
+// Graceful shutdown
+process.on('SIGINT', () => {
+    console.log('Получен сигнал SIGINT, останавливаем сервер...');
+    stopPythonService();
+    process.exit(0);
 });
 
-// Обновляем обработчик /api/execute
-app.post('/api/execute', async (req, res) => {
-  let sentResponse = false;
-  
-  // Проверяем, не выполняется ли уже команда
-  if (isProcessing && currentProcessPid) {
-    const isRunning = await processUtils.isProcessRunning(currentProcessPid);
-    if (isRunning) {
-      return res.status(400).json({ 
-        error: 'Команда уже выполняется',
-        currentCommand,
-        executionTime: processStartTime ? Math.floor((Date.now() - processStartTime) / 1000) : null
-      });
-    } else {
-      // Если процесс не запущен, но флаг isProcessing установлен, очищаем состояние
-      await cleanupProcess();
-    }
-  }
+process.on('SIGTERM', () => {
+    console.log('Получен сигнал SIGTERM, останавливаем сервер...');
+    stopPythonService();
+    process.exit(0);
+});
 
-  const { command } = req.body;
-  if (!command) {
-    return res.status(400).json({ error: 'Команда не указана' });
-  }
+// API endpoints - проксируем к Python сервису
+const PYTHON_SERVICE_URL = 'http://localhost:5000';
 
-  // Инициализируем состояние процесса
-    isProcessing = true;
-    currentCommand = command;
-  lastCommand = command;
-  lastResult = null;
-  lastError = null;
-    lastInterrupt = false;
-  processStartTime = Date.now();
-
-  const shell = process.platform === 'win32' ? 'cmd.exe' : '/bin/bash';
-  const fullCommand = process.platform === 'win32' ? `cmd.exe /c "${command}"` : `/bin/bash -c "${command}"`;
-
-  // Используем spawn вместо exec для лучшего контроля над процессом
-  const proc = spawn(shell, process.platform === 'win32' ? ['/c', command] : ['-c', command], {
-    windowsHide: true,
-    detached: process.platform !== 'win32' // На Linux создаем новую группу процессов
-  });
-
-    currentProcess = proc;
-    currentProcessPid = proc.pid;
-
-    let stdout = '';
-    let stderr = '';
-
-    proc.stdout.on('data', (data) => {
-      stdout += data.toString();
-    });
-
-    proc.stderr.on('data', (data) => {
-      stderr += data.toString();
-    });
-
-    proc.on('error', (error) => {
-      console.error(`[${new Date().toLocaleTimeString()}] Ошибка выполнения команды:`, error);
-    lastError = error.message;
-      if (!sentResponse) {
-        res.status(500).json({ 
-          error: 'Ошибка выполнения команды',
-          details: error.message
+// Прокси для всех API запросов к камерам
+app.use('/api/cameras', async (req, res) => {
+      try {
+        const response = await fetch(`${PYTHON_SERVICE_URL}${req.url}`, {
+            method: req.method,
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: req.method !== 'GET' ? JSON.stringify(req.body) : undefined
         });
-        sentResponse = true;
-      }
-      cleanupProcess();
-    });
-
-    proc.on('close', async (code, signal) => {
-      try {
-        if (signal) {
-          lastInterrupt = true;
-        lastError = `Команда завершена сигналом: ${signal}`;
-          if (!sentResponse) {
-            res.json({ 
-            error: lastError,
-              details: stderr
-            });
-            sentResponse = true;
-          }
-      } else if (code !== 0) {
-          console.error(`[${new Date().toLocaleTimeString()}] Ошибка выполнения команды ${command}:`, stderr);
-        lastError = `Команда завершилась с кодом ${code}`;
-          if (!sentResponse) {
-            res.json({ 
-            error: lastError,
-              details: stderr
-            });
-            sentResponse = true;
-          }
-      } else {
-        lastResult = stdout;
-        if (!sentResponse) {
-          res.json({ 
-            output: stdout,
-            details: stderr
-          });
-          sentResponse = true;
-        }
-        }
-      } catch (e) {
-        console.error('Ошибка в обработчике завершения процесса:', e);
-      lastError = e.message;
-        if (!sentResponse) {
-          res.status(500).json({ 
-            error: 'Ошибка в обработчике завершения процесса',
-            details: e.message
-          });
-          sentResponse = true;
-        }
-    } finally {
-      await cleanupProcess();
-      }
-    });
-
-  // Отвязываем процесс от родительского (на Linux)
-  if (process.platform !== 'win32') {
-    proc.unref();
-  }
-});
-
-// Обновляем обработчик /api/interrupt
-app.post('/api/interrupt', async (req, res) => {
-  if (isProcessing && currentProcessPid) {
-    try {
-      const success = await processUtils.terminateProcess(currentProcessPid, false);
-      
-      if (!success) {
-        // Если не удалось корректно завершить, пробуем принудительно
-        await processUtils.terminateProcess(currentProcessPid, true);
-      }
-
-      isProcessing = false;
-      currentProcess = null;
-      currentProcessPid = null;
-      currentCommand = null;
-      lastInterrupt = true;
-      
-      console.log(`[${new Date().toLocaleTimeString()}] Команда прервана пользователем`);
-      return res.json({ 
-        success: true, 
-        message: 'Команда прервана',
-        platform: process.platform
-      });
+        
+        const data = await response.json();
+        res.status(response.status).json(data);
     } catch (error) {
-      console.error(`[${new Date().toLocaleTimeString()}] Ошибка при прерывании команды:`, error);
-      return res.status(500).json({ 
-        error: 'Ошибка при прерывании команды',
-        details: error.message,
-        platform: process.platform
-      });
-    }
-  }
-    return res.status(400).json({ 
-      error: 'Нет выполняемой команды',
-      isProcessing,
-      currentCommand
-    });
-});
-
-// Чтение конфига
-async function readConfig() {
-  try {
-    const data = await fs.readFile(CONFIG_PATH, 'utf8');
-    return JSON.parse(data);
-  } catch (e) {
-    if (e.code === 'ENOENT') {
-      await fs.writeFile(CONFIG_PATH, JSON.stringify(DEFAULT_CONFIG, null, 2), 'utf8');
-      return DEFAULT_CONFIG;
-    }
-    throw e;
-  }
-}
-
-// Запись конфига
-async function writeConfig(config) {
-  await fs.writeFile(CONFIG_PATH, JSON.stringify(config, null, 2), 'utf8');
-}
-
-// Получить конфиг
-app.get('/api/config', async (req, res) => {
-  try {
-    const config = await readConfig();
-    // Нормализуем пути в конфиге перед отправкой
-    if (config.rootPath) {
-      config.rootPath = path.normalize(config.rootPath);
-    }
-    res.json(config);
-  } catch (error) {
-    console.error(`[${new Date().toLocaleTimeString()}] Ошибка чтения конфига:`, error);
+        console.error('Ошибка проксирования запроса к Python сервису:', error);
     res.status(500).json({ 
-      error: 'Ошибка чтения конфига', 
-      details: error.message,
-      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+            error: 'Ошибка подключения к сервису камер',
+            details: error.message 
     });
   }
 });
 
-// Сохранить конфиг
-app.post('/api/config', async (req, res) => {
+app.use('/api/camera', async (req, res) => {
   try {
-    const config = req.body;
-    
-    if (!config.RobotName || !config.rootPath || !config.sdkPath) {
-      return res.status(400).json({ error: 'Отсутствуют обязательные поля: RobotName, rootPath, sdkPath' });
-    }
-
-    // Проверяем CMakeLists.txt при сохранении конфига
-    try {
-      await cleanupCMakeLists(config.sdkPath);
-    } catch (error) {
-      console.error(`[${new Date().toLocaleTimeString()}] Ошибка при проверке CMakeLists.txt:`, error);
-    }
-
-    await fs.writeFile(CONFIG_PATH, JSON.stringify(config, null, 2), 'utf8');
-    res.json({ success: true });
+        const response = await fetch(`${PYTHON_SERVICE_URL}${req.url}`, {
+            method: req.method,
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: req.method !== 'GET' ? JSON.stringify(req.body) : undefined
+        });
+        
+        const data = await response.json();
+        res.status(response.status).json(data);
   } catch (error) {
-    console.error(`[${new Date().toLocaleTimeString()}] Ошибка при сохранении конфига:`, error);
-    res.status(500).json({ error: 'Ошибка при сохранении конфигурации' });
+        console.error('Ошибка проксирования запроса к Python сервису:', error);
+    res.status(500).json({
+            error: 'Ошибка подключения к сервису камер',
+      details: error.message
+    });
   }
 });
 
-// Добавляем функцию для обновления CMakeLists.txt
-async function updateCMakeLists(sdkPath, validFiles) {
-  try {
-    const cmakePath = path.join(sdkPath, 'example', 'h1', 'CMakeLists.txt');
-    let cmakeContent = await fs.readFile(cmakePath, 'utf8');
-    
-    // Находим все строки с файлами в high_level директории
-    const fileRegex = /(add_executable\([^)]+high_level\/[^)]+\))/g;
-    const lines = cmakeContent.split('\n');
-    const updatedLines = [];
-    let skipNextLine = false;
-    
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
-      
-      // Если это строка с add_executable и high_level
-      if (line.includes('add_executable') && line.includes('high_level')) {
-        const fileNameMatch = line.match(/high_level\/([^)\s]+\.cpp)/);
-        if (fileNameMatch) {
-          const fileName = fileNameMatch[1];
-          // Если файл существует, оставляем строку
-          if (validFiles.includes(fileName)) {
-            updatedLines.push(line);
-            // Добавляем следующую строку с target_link_libraries
-            if (i + 1 < lines.length && lines[i + 1].includes('target_link_libraries')) {
-              updatedLines.push(lines[i + 1]);
-              i++; // Пропускаем следующую строку, так как мы её уже добавили
-            }
-          } else {
-            // Если файл не существует, пропускаем текущую строку и следующую (target_link_libraries)
-            i++; // Пропускаем следующую строку
-            console.log(`[${new Date().toLocaleTimeString()}] Удалена запись для несуществующего файла: ${fileName}`);
-          }
-        } else {
-          updatedLines.push(line);
-        }
-      } else {
-        updatedLines.push(line);
-      }
-    }
-    
-    // Записываем обновленное содержимое
-    const updatedContent = updatedLines.join('\n');
-    if (updatedContent !== cmakeContent) {
-      await fs.writeFile(cmakePath, updatedContent, 'utf8');
-      console.log(`[${new Date().toLocaleTimeString()}] CMakeLists.txt обновлен`);
-    }
-  } catch (error) {
-    console.error(`[${new Date().toLocaleTimeString()}] Ошибка при обновлении CMakeLists.txt:`, error);
-  }
-}
-
-// Добавляем функцию для принудительной очистки при запуске
-async function forceCleanupCMakeLists() {
-  try {
-    const config = await readConfig();
-    const sdkPath = config.sdkPath;
-
-    if (!sdkPath) {
-      console.log(`[${new Date().toLocaleTimeString()}] SDK путь не указан в конфиге, пропускаем очистку`);
-      return;
-    }
-
-    console.log(`[${new Date().toLocaleTimeString()}] Выполняем принудительную очистку CMakeLists.txt при запуске`);
-    console.log(`[${new Date().toLocaleTimeString()}] Путь к SDK: ${sdkPath}`);
-
-    const wasCleaned = await cleanupCMakeLists(sdkPath);
-    console.log(`[${new Date().toLocaleTimeString()}] Результат очистки: ${wasCleaned ? 'файл обновлен' : 'изменений не требуется'}`);
-  } catch (error) {
-    console.error(`[${new Date().toLocaleTimeString()}] Ошибка при принудительной очистке:`, error);
-    console.error(`[${new Date().toLocaleTimeString()}] Стек ошибки:`, error.stack);
-  }
-}
-
-// Обновляем функцию cleanupCMakeLists для более строгой проверки
-async function cleanupCMakeLists(sdkPath) {
-  try {
-    const cmakePath = path.join(sdkPath, 'example', 'h1', 'CMakeLists.txt');
-    
-    try {
-      await fs.access(cmakePath, fs.constants.R_OK | fs.constants.W_OK);
-    } catch (error) {
-      console.error(`[${new Date().toLocaleTimeString()}] Нет доступа к CMakeLists.txt:`, error);
-      return false;
-    }
-
-    let cmakeContent = await fs.readFile(cmakePath, 'utf8');
-    cmakeContent = cmakeContent.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-    
-    const lines = cmakeContent.split('\n');
-    const updatedLines = [];
-    let hasChanges = false;
-    let i = 0;
-    
-    while (i < lines.length) {
-      const line = lines[i].trim();
-      
-      if (line.includes('add_executable')) {
-        const fileMatch = line.match(/(?:high_level|low_level)\/([^)\s]+\.cpp)/);
-        if (fileMatch) {
-          const fileName = fileMatch[1];
-          const fileType = line.includes('high_level') ? 'high_level' : 'low_level';
-          const filePath = path.join(sdkPath, 'example', 'h1', fileType, fileName);
-          
-          try {
-            const stats = await fs.stat(filePath);
-            if (!stats.isFile()) {
-              throw new Error('Not a file');
-            }
-            updatedLines.push(lines[i]);
-            if (i + 1 < lines.length && lines[i + 1].includes('target_link_libraries')) {
-              updatedLines.push(lines[i + 1]);
-            }
-          } catch (error) {
-            hasChanges = true;
-          }
-          i += 2;
-        } else {
-          updatedLines.push(lines[i]);
-          i++;
-        }
-      } else {
-        updatedLines.push(lines[i]);
-        i++;
-      }
-    }
-    
-    if (hasChanges) {
-      while (updatedLines.length > 0 && updatedLines[updatedLines.length - 1].trim() === '') {
-        updatedLines.pop();
-      }
-      const updatedContent = updatedLines.join('\n') + '\n';
-      
-      try {
-        await fs.writeFile(cmakePath, updatedContent, 'utf8');
-        return true;
-      } catch (error) {
-        console.error(`[${new Date().toLocaleTimeString()}] Ошибка при записи в CMakeLists.txt:`, error);
-        return false;
-      }
-    }
-    return false;
-  } catch (error) {
-    console.error(`[${new Date().toLocaleTimeString()}] Ошибка при очистке CMakeLists.txt:`, error);
-    return false;
-  }
-}
-
-// Обновляем функцию getValidMotionFiles
-async function getValidMotionFiles(sdkPath) {
-  try {
-    // Сначала очищаем CMakeLists.txt от несуществующих файлов
-    await cleanupCMakeLists(sdkPath);
-    
-    const cmakePath = path.join(sdkPath, 'example', 'h1', 'CMakeLists.txt');
-    const cmakeContent = await fs.readFile(cmakePath, 'utf8');
-    
-    // Ищем все файлы в high_level директории
-    const fileRegex = /high_level\/([^)\s]+\.cpp)/g;
-    const files = [];
-    let match;
-    
-    while ((match = fileRegex.exec(cmakeContent)) !== null) {
-      files.push(match[1]); // Добавляем все файлы из CMakeLists.txt
-    }
-    
-    return files;
-  } catch (error) {
-    console.error(`[${new Date().toLocaleTimeString()}] Ошибка при чтении CMakeLists.txt:`, error);
-    return [];
-  }
-}
-
-// Добавляем функцию для добавления нового файла в CMakeLists.txt
-async function addFileToCMakeLists(sdkPath, fileName) {
-  try {
-    const cmakePath = path.join(sdkPath, 'example', 'h1', 'CMakeLists.txt');
-    let cmakeContent = await fs.readFile(cmakePath, 'utf8');
-    cmakeContent = cmakeContent.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-    
-    if (cmakeContent.includes(`high_level/${fileName}`)) {
-      return;
-    }
-
-    const execName = fileName.replace('.cpp', '');
-    const newLines = [
-      `add_executable(${execName} high_level/${fileName})`,
-      `target_link_libraries(${execName} unitree_sdk2)`
-    ].join('\n');
-
-    while (cmakeContent.endsWith('\n\n')) {
-      cmakeContent = cmakeContent.slice(0, -1);
-    }
-    
-    const updatedContent = cmakeContent + '\n\n' + newLines + '\n';
-    await fs.writeFile(cmakePath, updatedContent, 'utf8');
-    console.log(`[${new Date().toLocaleTimeString()}] Добавлена запись для нового файла: ${fileName}`);
-  } catch (error) {
-    console.error(`[${new Date().toLocaleTimeString()}] Ошибка при добавлении файла в CMakeLists.txt:`, error);
-    throw error;
-  }
-}
-
-// Обновляем эндпоинт для сохранения файла движения
-app.post('/api/motion/save', async (req, res) => {
-  try {
-    const { filename, content } = req.body;
-    
-    if (!filename || !content) {
-      return res.status(400).json({
-        error: 'Неверные параметры',
-        details: 'Необходимо указать имя файла и содержимое'
-      });
-    }
-
-    // Получаем конфиг
-    const config = await readConfig();
-    const sdkPath = config.sdkPath;
-
-    if (!sdkPath) {
-      return res.status(400).json({
-        error: 'Не указан путь к SDK',
-        details: 'Необходимо указать sdkPath в конфигурации'
-      });
-    }
-
-    // Формируем полный путь к файлу
-    const fullPath = path.join(sdkPath, 'example', 'h1', 'high_level', filename);
-
-    // Проверяем, существует ли файл
-    const fileExists = await fsUtils.checkExists(fullPath);
-
-    // Сначала сохраняем файл
-    await fs.writeFile(fullPath, content, 'utf8');
-
-    // Проверяем и очищаем CMakeLists.txt
-    try {
-      await cleanupCMakeLists(sdkPath);
-      
-      // Проверяем наличие записи о текущем файле в CMakeLists.txt
-      const cmakePath = path.join(sdkPath, 'example', 'h1', 'CMakeLists.txt');
-      const cmakeContent = await fs.readFile(cmakePath, 'utf8');
-
-      // Если записи о файле нет, добавляем её
-      if (!cmakeContent.includes(`high_level/${filename}`)) {
-        console.log(`[${new Date().toLocaleTimeString()}] Запись о файле ${filename} отсутствует в CMakeLists.txt, добавляем...`);
-        await addFileToCMakeLists(sdkPath, filename);
-      }
-    } catch (error) {
-      console.error(`[${new Date().toLocaleTimeString()}] Ошибка при проверке CMakeLists.txt:`, error);
-      // Не возвращаем ошибку, так как файл уже сохранен
-    }
-    
+// Статус сервера
+app.get('/api/status', (req, res) => {
     res.json({
-      message: 'Файл успешно сохранен',
-      path: path.join('example', 'h1', 'high_level', filename).replace(/\\/g, '/'),
-      fullPath: fullPath.replace(/\\/g, '/'),
-      isNew: !fileExists
+        status: 'ok',
+        python_service: isPythonRunning ? 'running' : 'stopped',
+        timestamp: new Date().toISOString()
     });
-  } catch (error) {
-    console.error(`[${new Date().toLocaleTimeString()}] Ошибка при сохранении файла движения:`, {
-      error: error.message,
-      code: error.code,
-      stack: error.stack
-    });
-    res.status(500).json({
-      error: 'Ошибка при сохранении файла',
-      details: error.message
-    });
-  }
 });
 
-// Обновляем эндпоинт для получения списка файлов движений
-app.get('/api/motion/files', async (req, res) => {
+// WebSocket для стрима камер (прокси к Python сервису)
+const { WebSocketServer } = require('ws');
+const wss = new WebSocketServer({ server });
+
+wss.on('connection', (ws) => {
+    console.log('WebSocket клиент подключен');
+
+    // Создаем HTTP запрос к Python сервису для стрима
+    const streamRequest = async () => {
   try {
-    const config = await readConfig();
-    const sdkPath = config.sdkPath;
-
-    if (!sdkPath) {
-      return res.status(400).json({
-        error: 'Не указан путь к SDK',
-        details: 'Необходимо указать sdkPath в конфигурации'
-      });
-    }
-
-    const wasCleaned = await cleanupCMakeLists(sdkPath);
-    const cmakePath = path.join(sdkPath, 'example', 'h1', 'CMakeLists.txt');
-    const cmakeContent = await fs.readFile(cmakePath, 'utf8');
-    const fileRegex = /high_level\/([^)\s]+\.cpp)/g;
-    const files = [];
-    let match;
+            const response = await fetch(`${PYTHON_SERVICE_URL}/api/cameras/stream`);
+            const reader = response.body;
+            
+            reader.on('data', (chunk) => {
+                const data = chunk.toString();
+                const lines = data.split('\n');
     
-    while ((match = fileRegex.exec(cmakeContent)) !== null) {
-      const fileName = match[1];
-      const filePath = path.join(sdkPath, 'example', 'h1', 'high_level', fileName);
+                for (const line of lines) {
+                    if (line.startsWith('data: ')) {
       try {
-        const stats = await fs.stat(filePath);
-        if (stats.isFile()) {
-          files.push(fileName);
+                            const jsonData = JSON.parse(line.slice(6));
+                            ws.send(JSON.stringify(jsonData));
+                        } catch (e) {
+                            // Игнорируем ошибки парсинга
+                        }
+                    }
+                }
+            });
+            
+            reader.on('error', (error) => {
+                console.error('Ошибка чтения стрима:', error);
+                ws.close();
+            });
+            
+  } catch (error) {
+            console.error('Ошибка подключения к стриму:', error);
+            ws.close();
         }
-      } catch (error) {
-        console.error(`[${new Date().toLocaleTimeString()}] Файл не найден: ${filePath}`);
-      }
-    }
-
-    res.json({
-      files,
-      wasCleaned
-    });
-  } catch (error) {
-    console.error(`[${new Date().toLocaleTimeString()}] Ошибка при получении списка файлов:`, error);
-    console.error(`[${new Date().toLocaleTimeString()}] Стек ошибки:`, error.stack);
-    res.status(500).json({
-      error: 'Ошибка при получении списка файлов',
-      details: error.message
-    });
-  }
-});
-
-// Функция для поиска файлов с updateJointPositions
-async function findFilesWithUpdateJointPositions(sdkPath) {
-  try {
-    const highLevelPath = path.join(sdkPath, 'example', 'h1', 'high_level');
-    const exists = await fsUtils.checkExists(highLevelPath);
-
-    if (!exists) {
-      console.error(`[${new Date().toLocaleTimeString()}] Директория high_level не найдена`);
-      return [];
-    }
-
-    const files = await fs.readdir(highLevelPath);
-    const validFiles = [];
-    
-    for (const file of files) {
-      if (!file.endsWith('.cpp')) continue;
-      
-      const filePath = path.join(highLevelPath, file);
-      try {
-        const content = await fs.readFile(filePath, 'utf8');
-        if (content.includes('updateJointPositions')) {
-          validFiles.push(file);
-        }
-      } catch (error) {
-        console.error(`[${new Date().toLocaleTimeString()}] Ошибка при чтении файла ${file}:`, error);
-      }
-    }
-    
-    return validFiles;
-  } catch (error) {
-    console.error(`[${new Date().toLocaleTimeString()}] Ошибка при поиске файлов:`, {
-      error: error.message,
-      code: error.code,
-      stack: error.stack
-    });
-    return [];
-  }
-    }
-
-// Добавляем новый эндпоинт для получения списка файлов с updateJointPositions
-app.get('/api/motion/valid-files', async (req, res) => {
-  try {
-    const config = await readConfig();
-    const sdkPath = config.sdkPath;
-
-    if (!sdkPath) {
-      return res.status(400).json({
-        error: 'Не указан путь к SDK',
-        details: 'Необходимо указать sdkPath в конфигурации'
-      });
-    }
-
-    const files = await findFilesWithUpdateJointPositions(sdkPath);
-    res.json({ files });
-  } catch (error) {
-    console.error(`[${new Date().toLocaleTimeString()}] Ошибка при получении списка валидных файлов:`, error);
-    res.status(500).json({
-      error: 'Ошибка при получении списка файлов',
-      details: error.message
-    });
-  }
-});
-
-// Добавляем эндпоинт для получения содержимого файла движения
-app.get('/api/motions/:filename', async (req, res) => {
-  try {
-    const { filename } = req.params;
-    const config = await readConfig();
-    const sdkPath = config.sdkPath;
-
-    if (!sdkPath) {
-      console.error(`[${new Date().toLocaleTimeString()}] Ошибка: не указан путь к SDK`);
-      return res.status(400).json({
-        error: 'Не указан путь к SDK',
-        details: 'Необходимо указать sdkPath в конфигурации'
-      });
-    }
-
-    const fullPath = path.join(sdkPath, 'example', 'h1', 'high_level', filename);
-    const exists = await fsUtils.checkExists(fullPath);
-    
-    if (!exists) {
-      console.error(`[${new Date().toLocaleTimeString()}] Ошибка: файл не найден:`, fullPath);
-      return res.status(404).json({
-        error: 'Файл не найден',
-        details: `Файл "${filename}" не существует`
-      });
-    }
-
-    const content = await fs.readFile(fullPath, 'utf8');
-    res.json({ content });
-  } catch (error) {
-    console.error(`[${new Date().toLocaleTimeString()}] Ошибка при чтении файла движения:`, {
-      error: error.message,
-      code: error.code,
-      stack: error.stack
-    });
-    res.status(500).json({
-      error: 'Ошибка при чтении файла',
-      details: error.message
-    });
-  }
-});
-
-// Утилита для работы с логами
-const logUtils = {
-  // Максимальное количество логов в памяти
-  MAX_LOGS: 1000,
-  
-  // Хранилище логов
-  logs: [],
-  
-  // Добавление лога
-  addLog: (message, type = 'info') => {
-    const log = {
-      timestamp: Date.now(),
-      message,
-      type
     };
-    logUtils.logs.unshift(log);
-    // Ограничиваем количество логов
-    if (logUtils.logs.length > logUtils.MAX_LOGS) {
-      logUtils.logs.pop();
-    }
-  },
-  
-  // Получение логов
-  getLogs: (limit = 100) => {
-    return logUtils.logs.slice(0, limit);
-  },
-  
-  // Очистка логов
-  clearLogs: () => {
-    logUtils.logs = [];
-  }
-};
-
-// Перехватываем console.log, console.error и console.warn
-const originalConsoleLog = console.log;
-const originalConsoleError = console.error;
-const originalConsoleWarn = console.warn;
-
-console.log = (...args) => {
-  const message = args.map(arg => 
-    typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg)
-  ).join(' ');
-  logUtils.addLog(message, 'info');
-  originalConsoleLog.apply(console, args);
-};
-
-console.error = (...args) => {
-  const message = args.map(arg => 
-    typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg)
-  ).join(' ');
-  logUtils.addLog(message, 'error');
-  originalConsoleError.apply(console, args);
-};
-
-console.warn = (...args) => {
-  const message = args.map(arg => 
-    typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg)
-  ).join(' ');
-  logUtils.addLog(message, 'warning');
-  originalConsoleWarn.apply(console, args);
-};
-
-// Эндпоинт для получения логов
-app.get('/api/logs', async (req, res) => {
-  try {
-    const { limit = 100 } = req.query;
-    const logs = logUtils.getLogs(Number(limit));
-    res.json({ logs });
-  } catch (error) {
-    console.error('Ошибка при получении логов:', error);
-    res.status(500).json({
-      error: 'Ошибка при получении логов',
-      details: error.message
+    
+    streamRequest();
+    
+    ws.on('close', () => {
+        console.log('WebSocket клиент отключен');
     });
-  }
 });
 
-// Эндпоинт для очистки логов
-app.post('/api/logs/clear', async (req, res) => {
-  try {
-    logUtils.clearLogs();
-    res.json({ message: 'Логи успешно очищены' });
-  } catch (error) {
-    console.error('Ошибка при очистке логов:', error);
-    res.status(500).json({ 
-      error: 'Ошибка при очистке логов',
-      details: error.message
-    });
-  }
-});
-
-app.listen(port, '0.0.0.0', () => {
-  console.log(`[${new Date().toLocaleTimeString()}] Сервер запущен на порту ${port}`);
+const PORT = process.env.PORT || 3001;
+server.listen(PORT, () => {
+    console.log(`Node.js сервер запущен на порту ${PORT}`);
+    console.log(`Python сервис камер будет доступен на порту 5000`);
 }); 

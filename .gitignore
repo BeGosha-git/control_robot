@@ -15,7 +15,7 @@ Thumbs.db
 
 # Docker
 .docker
-docker-compose.override.yml
+docker-compose.override.yml 
 
 # Логи и PID файлы
 /home/unitree/backend.log

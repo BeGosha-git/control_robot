@@ -162,6 +162,13 @@ install_backend_dependencies() {
 stop_existing_processes() {
     log "Остановка существующих процессов..."
     
+    # Остановка системного сервиса (если запущен)
+    if systemctl is-active h1-control.service > /dev/null 2>&1; then
+        info "Остановка системного сервиса..."
+        systemctl stop h1-control.service || warn "Не удалось остановить системный сервис"
+        sleep 2
+    fi
+    
     # Остановка Docker контейнеров
     docker compose down 2>/dev/null || true
     
@@ -286,6 +293,74 @@ check_services() {
     fi
 }
 
+# Функция для установки системного сервиса
+install_system_service() {
+    log "Проверка системного сервиса..."
+    
+    # Проверяем наличие файла сервиса
+    if [ ! -f "h1-control.service" ]; then
+        warn "Файл сервиса h1-control.service не найден"
+        return 0
+    fi
+    
+    # Проверяем, установлен ли сервис
+    if [ -f "/etc/systemd/system/h1-control.service" ]; then
+        info "Системный сервис уже установлен"
+        
+        # Проверяем, включен ли автозапуск
+        if systemctl is-enabled h1-control.service > /dev/null 2>&1; then
+            info "Автозапуск сервиса уже включен"
+        else
+            info "Включение автозапуска сервиса..."
+            systemctl enable h1-control.service || warn "Не удалось включить автозапуск сервиса"
+        fi
+    else
+        info "Установка системного сервиса..."
+        
+        # Копируем файл сервиса
+        cp h1-control.service /etc/systemd/system/ || error "Не удалось скопировать файл сервиса"
+        chmod 644 /etc/systemd/system/h1-control.service || error "Не удалось установить права на файл сервиса"
+        
+        # Перезагружаем systemd
+        systemctl daemon-reload || error "Не удалось перезагрузить systemd"
+        
+        # Включаем автозапуск
+        systemctl enable h1-control.service || error "Не удалось включить сервис"
+        
+        info "Системный сервис установлен и включен"
+    fi
+    
+    # Создание и настройка лог-файла
+    if [ ! -f "/home/unitree/h1_control.log" ]; then
+        info "Создание лог-файла..."
+        touch /home/unitree/h1_control.log || error "Не удалось создать лог-файл"
+        chown unitree:unitree /home/unitree/h1_control.log || error "Не удалось изменить владельца лог-файла"
+        chmod 644 /home/unitree/h1_control.log || error "Не удалось установить права на лог-файл"
+    fi
+}
+
+# Функция для запуска системного сервиса
+start_system_service() {
+    log "Запуск системного сервиса..."
+    
+    if systemctl is-active h1-control.service > /dev/null 2>&1; then
+        info "Системный сервис уже запущен"
+    else
+        info "Запуск системного сервиса..."
+        systemctl start h1-control.service || error "Не удалось запустить системный сервис"
+        
+        # Ждем немного для запуска
+        sleep 3
+        
+        # Проверяем статус
+        if systemctl is-active h1-control.service > /dev/null 2>&1; then
+            info "Системный сервис успешно запущен"
+        else
+            error "Системный сервис не запустился"
+        fi
+    fi
+}
+
 # Основная логика
 main() {
     log "Запуск единого скрипта H1..."
@@ -324,16 +399,29 @@ main() {
     # Проверка сервисов
     check_services
     
+    # Установка системного сервиса
+    install_system_service
+    
+    # Запуск системного сервиса
+    start_system_service
+    
     # Финальное сообщение
     log "Установка успешно завершена!"
     echo -e "\n${GREEN}Приложение доступно по адресам:${NC}"
     echo "Frontend: http://localhost"
     echo "Backend API: http://localhost:3001"
-    echo -e "\n${YELLOW}Управление:${NC}"
+    echo -e "\n${YELLOW}Управление приложением:${NC}"
     echo "Логи backend: tail -f /home/unitree/backend.log"
     echo "Логи frontend: docker compose logs -f"
-    echo "Остановка: docker compose down && kill \$(cat /home/unitree/backend.pid)"
+    echo "Остановка: ./stop_h1.sh"
     echo "Перезапуск: sudo ./start_h1_unified.sh"
+    echo -e "\n${YELLOW}Управление системным сервисом:${NC}"
+    echo "Статус:    sudo systemctl status h1-control"
+    echo "Логи:      sudo journalctl -u h1-control -f"
+    echo "Перезапуск: sudo systemctl restart h1-control"
+    echo "Остановка:  sudo systemctl stop h1-control"
+    echo "Автозапуск: sudo systemctl enable h1-control"
+    echo "Отключение: sudo systemctl disable h1-control"
 }
 
 # Запуск основной функции

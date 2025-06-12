@@ -21,6 +21,14 @@ error() {
 
 log "Остановка H1 сервисов..."
 
+# Остановка системного сервиса
+if systemctl is-active h1-control.service > /dev/null 2>&1; then
+    log "Остановка системного сервиса..."
+    systemctl stop h1-control.service || warn "Не удалось остановить системный сервис"
+else
+    warn "Системный сервис не запущен"
+fi
+
 # Остановка Docker контейнеров
 if command -v docker &> /dev/null; then
     log "Остановка Docker контейнеров..."
@@ -51,17 +59,10 @@ else
     warn "PID файл backend не найден"
 fi
 
-# Остановка системных сервисов
-if [ -f "/etc/systemd/system/control_robot.service" ]; then
-    log "Остановка системного сервиса..."
-    systemctl stop control_robot.service 2>/dev/null || warn "Сервис control_robot не запущен"
-fi
-
-if [ -f "/etc/systemd/system/h1_control.service" ]; then
-    log "Остановка системного сервиса..."
-    systemctl stop h1_control.service 2>/dev/null || warn "Сервис h1_control не запущен"
-fi
-
 log "Все сервисы остановлены!"
 echo -e "\n${YELLOW}Для запуска используйте:${NC}"
-echo "sudo ./start_h1_unified.sh" 
+echo "sudo ./start_h1_unified.sh"
+echo -e "\n${YELLOW}Для управления сервисом:${NC}"
+echo "Статус:    sudo systemctl status h1-control"
+echo "Логи:      sudo journalctl -u h1-control -f"
+echo "Перезапуск: sudo systemctl restart h1-control" 

@@ -4,24 +4,26 @@ import {
   Typography, 
   Paper, 
   CircularProgress,
-  Select,
-  MenuItem,
-  FormControl,
-  InputLabel,
   Button,
   IconButton,
   Tooltip,
   useMediaQuery,
-  useTheme
+  useTheme,
+  Grid,
+  Card,
+  CardContent,
+  Alert,
+  Chip
 } from '@mui/material';
 import {
   Refresh as RefreshIcon,
   Videocam as CameraIcon,
-  Settings as SettingsIcon,
   PlayArrow as PlayIcon,
   Stop as StopIcon,
   Fullscreen as FullscreenIcon,
-  FullscreenExit as FullscreenExitIcon
+  FullscreenExit as FullscreenExitIcon,
+  PlayCircleOutline as StartAllIcon,
+  StopCircle as StopAllIcon
 } from '@mui/icons-material';
 import { useRobot } from '../contexts/RobotContext';
 import { useNavigate } from 'react-router-dom';
@@ -32,85 +34,280 @@ const CameraTest = () => {
   const theme = useTheme();
   const isMobile = useIsMobile();
   const isLandscape = useMediaQuery('(orientation: landscape)');
-  const canvasRef = useRef(null);
-  const wsRef = useRef(null);
-  const [isConnected, setIsConnected] = useState(false);
-  const [error, setError] = useState(null);
   const [cameras, setCameras] = useState([]);
-  const [selectedCamera, setSelectedCamera] = useState(0);
-  const [isStreaming, setIsStreaming] = useState(false);
-  const [isPlaying, setIsPlaying] = useState(false);
+  const [activeCameras, setActiveCameras] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const videoRef = useRef(null);
-  const containerRef = useRef(null);
+  const [streamData, setStreamData] = useState({});
+  const eventSourceRef = useRef(null);
   const { robotName } = useRobot();
 
-  // Мемоизированная функция получения списка камер
+  // Получение списка всех доступных камер
   const fetchCameras = useCallback(async () => {
     try {
+      setIsLoading(true);
       const response = await fetch('http://localhost:3001/api/cameras');
       const data = await response.json();
-      setCameras(data.cameras);
+      setCameras(data.cameras || []);
+      setActiveCameras(data.cameras?.filter(cam => cam.is_active) || []);
+      setError(null);
     } catch (err) {
       console.error('Ошибка получения списка камер:', err);
       setError('Не удалось получить список камер');
+    } finally {
+      setIsLoading(false);
     }
   }, []);
 
-  // Мемоизированная функция смены камеры
-  const handleCameraChange = useCallback(async (event) => {
-    const newCameraIndex = event.target.value;
+  // Запуск всех камер
+  const startAllCameras = useCallback(async () => {
     try {
-      const response = await fetch('http://localhost:3001/api/camera', {
+      const response = await fetch('http://localhost:3001/api/cameras/start-all', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ deviceIndex: newCameraIndex }),
+        }
       });
       
       if (response.ok) {
-        setSelectedCamera(newCameraIndex);
-        if (wsRef.current) {
-          wsRef.current.close();
-        }
+        const data = await response.json();
+        console.log('Запущено камер:', data.started_count);
+        await fetchCameras(); // Обновляем список
       } else {
-        setError('Не удалось сменить камеру');
+        setError('Не удалось запустить камеры');
       }
     } catch (err) {
-      console.error('Ошибка смены камеры:', err);
-      setError('Ошибка смены камеры');
+      console.error('Ошибка запуска камер:', err);
+      setError('Ошибка запуска камер');
     }
-  }, []);
+  }, [fetchCameras]);
 
-  // Мемоизированная функция отрисовки кадра
-  const drawFrame = useCallback((matrix) => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
-    const ctx = canvas.getContext('2d');
-    const imageData = ctx.createImageData(matrix[0].length, matrix.length);
-    const data = imageData.data;
-
-    for (let y = 0; y < matrix.length; y++) {
-      for (let x = 0; x < matrix[y].length; x++) {
-        const value = matrix[y][x];
-        const i = (y * matrix[y].length + x) * 4;
-        data[i] = value;     // R
-        data[i + 1] = value; // G
-        data[i + 2] = value; // B
-        data[i + 3] = 255;   // A
+  // Остановка всех камер
+  const stopAllCameras = useCallback(async () => {
+    try {
+      const response = await fetch('http://localhost:3001/api/cameras/stop-all', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        }
+      });
+      
+      if (response.ok) {
+        console.log('Все камеры остановлены');
+        await fetchCameras(); // Обновляем список
+      } else {
+        setError('Не удалось остановить камеры');
       }
+    } catch (err) {
+      console.error('Ошибка остановки камер:', err);
+      setError('Ошибка остановки камер');
+    }
+  }, [fetchCameras]);
+
+  // Запуск конкретной камеры
+  const startCamera = useCallback(async (cameraId) => {
+    try {
+      const response = await fetch(`http://localhost:3001/api/camera/${cameraId}/start`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        }
+      });
+      
+      if (response.ok) {
+        await fetchCameras(); // Обновляем список
+      } else {
+        setError(`Не удалось запустить камеру ${cameraId}`);
+      }
+    } catch (err) {
+      console.error('Ошибка запуска камеры:', err);
+      setError('Ошибка запуска камеры');
+    }
+  }, [fetchCameras]);
+
+  // Остановка конкретной камеры
+  const stopCamera = useCallback(async (cameraId) => {
+    try {
+      const response = await fetch(`http://localhost:3001/api/camera/${cameraId}/stop`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        }
+      });
+      
+      if (response.ok) {
+        await fetchCameras(); // Обновляем список
+      } else {
+        setError(`Не удалось остановить камеру ${cameraId}`);
+      }
+    } catch (err) {
+      console.error('Ошибка остановки камеры:', err);
+      setError('Ошибка остановки камеры');
+    }
+  }, [fetchCameras]);
+
+  // Подключение к стриму камер
+  const connectToStream = useCallback(() => {
+    if (eventSourceRef.current) {
+      eventSourceRef.current.close();
     }
 
-    ctx.putImageData(imageData, 0, 0);
+    const eventSource = new EventSource('http://localhost:3001/api/cameras/stream');
+    eventSourceRef.current = eventSource;
+
+    eventSource.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (data.type === 'frames') {
+          setStreamData(prev => {
+            const newData = { ...prev };
+            data.frames.forEach(frame => {
+              newData[frame.camera_id] = frame;
+            });
+            return newData;
+          });
+        }
+      } catch (err) {
+        console.error('Ошибка обработки данных стрима:', err);
+      }
+    };
+
+    eventSource.onerror = (error) => {
+      console.error('Ошибка EventSource:', error);
+      setError('Ошибка подключения к стриму');
+    };
+
+    return () => {
+      eventSource.close();
+    };
   }, []);
 
-  // Мемоизированный рендер
-  const renderContent = useMemo(() => (
+  // Компонент для отображения кадра камеры
+  const CameraFrame = ({ camera, frameData }) => {
+    const canvasRef = useRef(null);
+
+    useEffect(() => {
+      if (frameData && canvasRef.current) {
+    const canvas = canvasRef.current;
+        const ctx = canvas.getContext('2d');
+        const img = new Image();
+        
+        img.onload = () => {
+          canvas.width = img.width;
+          canvas.height = img.height;
+          ctx.drawImage(img, 0, 0);
+        };
+        
+        img.src = `data:image/jpeg;base64,${frameData.frame}`;
+      }
+    }, [frameData]);
+
+    return (
+      <Card 
+        sx={{ 
+          height: '100%',
+          display: 'flex',
+          flexDirection: 'column',
+          background: 'rgba(255, 255, 255, 0.05)',
+          backdropFilter: 'blur(10px)',
+          border: '1px solid rgba(255, 255, 255, 0.1)'
+        }}
+      >
+        <CardContent sx={{ flexGrow: 1, p: 2 }}>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+            <Typography variant="h6" sx={{ color: 'primary.main' }}>
+              {camera.name}
+            </Typography>
+            <Chip 
+              label={camera.is_active ? 'Активна' : 'Неактивна'} 
+              color={camera.is_active ? 'success' : 'default'}
+              size="small"
+            />
+          </Box>
+          
+          <Box sx={{ position: 'relative', width: '100%', height: 240 }}>
+            <canvas
+              ref={canvasRef}
+              style={{
+                width: '100%',
+                height: '100%',
+                border: '1px solid rgba(255, 255, 255, 0.1)',
+                borderRadius: '4px',
+                background: '#000',
+                objectFit: 'contain'
+              }}
+            />
+            {!camera.is_active && (
+              <Box sx={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                background: 'rgba(0, 0, 0, 0.7)',
+                borderRadius: '4px'
+              }}>
+                <Typography variant="body2" sx={{ color: 'white' }}>
+                  Камера неактивна
+                </Typography>
+              </Box>
+            )}
+          </Box>
+
+          <Box sx={{ display: 'flex', gap: 1, mt: 2 }}>
+            <Button
+              variant="contained"
+              size="small"
+              startIcon={camera.is_active ? <StopIcon /> : <PlayIcon />}
+              onClick={() => camera.is_active ? stopCamera(camera.id) : startCamera(camera.id)}
+              fullWidth
+            >
+              {camera.is_active ? 'Остановить' : 'Запустить'}
+            </Button>
+          </Box>
+        </CardContent>
+      </Card>
+    );
+  };
+
+  // Эффект для загрузки камер при монтировании
+  useEffect(() => {
+    fetchCameras();
+  }, [fetchCameras]);
+
+  // Эффект для подключения к стриму
+  useEffect(() => {
+    const cleanup = connectToStream();
+    return cleanup;
+  }, [connectToStream]);
+
+  // Очистка при размонтировании
+  useEffect(() => {
+    return () => {
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
+      }
+    };
+  }, []);
+
+  // Редирект на главную для мобильных устройств
+  useEffect(() => {
+    if (isMobile) {
+      navigate('/');
+    }
+  }, [isMobile, navigate]);
+
+  // Если мобильное устройство, не рендерим компонент
+  if (isMobile) {
+    return null;
+  }
+
+  return (
     <Box
-      ref={containerRef}
       sx={{
         width: '100vw',
         height: '100vh',
@@ -142,268 +339,76 @@ const CameraTest = () => {
         minHeight: '100vh',
         display: 'flex',
         flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
         background: `linear-gradient(45deg, ${theme.palette.background.default}, ${theme.palette.background.paper})`,
         p: 3
       }}>
-        <Typography variant="h4" sx={{ mb: 4, color: 'primary.main' }}>
-          Стрим камеры
+        <Typography variant="h4" sx={{ mb: 2, color: 'primary.main', textAlign: 'center' }}>
+          Стрим камер
         </Typography>
 
-        <Paper 
-          elevation={3}
-          sx={{
-            p: 2,
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            gap: 2,
-            background: 'rgba(255, 255, 255, 0.05)',
-            backdropFilter: 'blur(10px)',
-            border: '1px solid rgba(255, 255, 255, 0.1)',
-            width: '100%',
-            maxWidth: 800
-          }}
-        >
-          <Box sx={{ 
-            display: 'flex', 
-            gap: 2, 
-            width: '100%',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            mb: 2
-          }}>
-            <FormControl sx={{ minWidth: 200 }}>
-              <InputLabel>Выберите камеру</InputLabel>
-              <Select
-                value={selectedCamera}
-                onChange={handleCameraChange}
-                label="Выберите камеру"
-                disabled={!isConnected || cameras.length === 0}
-              >
-                {cameras.length === 0 ? (
-                  <MenuItem disabled>
-                    Камеры не найдены
-                  </MenuItem>
-                ) : (
-                  cameras.map((camera) => (
-                    <MenuItem 
-                      key={camera.id} 
-                      value={camera.id}
-                      sx={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 1
-                      }}
-                    >
-                      {camera.name}
-                      {camera.isActive && (
-                        <CameraIcon 
-                          fontSize="small" 
-                          color="primary"
-                          sx={{ ml: 1 }}
-                        />
-                      )}
-                    </MenuItem>
-                  ))
-                )}
-              </Select>
-            </FormControl>
+        {error && (
+          <Alert severity="error" sx={{ mb: 2 }}>
+            {error}
+          </Alert>
+        )}
 
-            <Box sx={{ display: 'flex', gap: 1 }}>
+        <Box sx={{ display: 'flex', gap: 2, mb: 3, justifyContent: 'center' }}>
+          <Button
+            variant="contained"
+            startIcon={<StartAllIcon />}
+            onClick={startAllCameras}
+            disabled={isLoading}
+          >
+            Запустить все камеры
+          </Button>
+          <Button
+            variant="contained"
+            color="secondary"
+            startIcon={<StopAllIcon />}
+            onClick={stopAllCameras}
+            disabled={isLoading}
+          >
+            Остановить все камеры
+          </Button>
               <Tooltip title="Обновить список камер">
                 <IconButton 
                   onClick={fetchCameras}
                   color="primary"
+              disabled={isLoading}
                 >
                   <RefreshIcon />
                 </IconButton>
               </Tooltip>
-              <Tooltip title="Настройки камеры">
-                <IconButton 
-                  color="primary"
-                  disabled={!isConnected || cameras.length === 0}
-                >
-                  <SettingsIcon />
-                </IconButton>
-              </Tooltip>
-            </Box>
           </Box>
 
-          <Box sx={{ position: 'relative' }}>
-            <canvas
-              ref={canvasRef}
-              width={640}
-              height={480}
-              style={{
-                border: '1px solid rgba(255, 255, 255, 0.1)',
-                borderRadius: '4px',
-                background: '#000',
-                width: '100%',
-                height: 'auto'
-              }}
-            />
-            {!isConnected && (
-              <Box sx={{
-                position: 'absolute',
-                top: 0,
-                left: 0,
-                right: 0,
-                bottom: 0,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                background: 'rgba(0, 0, 0, 0.7)',
-                borderRadius: '4px'
-              }}>
+        {isLoading ? (
+          <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: 400 }}>
                 <CircularProgress />
-              </Box>
-            )}
           </Box>
-
-          <Box sx={{ 
-            display: 'flex', 
-            alignItems: 'center', 
-            gap: 2,
-            mt: 2
-          }}>
-            <Typography 
-              variant="body2" 
-              sx={{ 
-                color: isConnected ? 'success.main' : 'error.main',
-                display: 'flex',
-                alignItems: 'center',
-                gap: 1
-              }}
-            >
-              <CameraIcon fontSize="small" />
-              {isConnected ? 'Подключено' : 'Подключение...'}
+        ) : cameras.length === 0 ? (
+          <Paper sx={{ p: 4, textAlign: 'center' }}>
+            <Typography variant="h6" color="text.secondary">
+              Камеры не найдены
             </Typography>
-
-            {isStreaming && cameras.length > 0 && cameras[selectedCamera] && (
-              <Typography 
-                variant="body2" 
-                sx={{ 
-                  color: 'info.main',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 1
-                }}
-              >
-                {cameras[selectedCamera].name}
-                {cameras[selectedCamera].isActive && (
-                  <CameraIcon 
-                    fontSize="small" 
-                    color="primary"
-                  />
-                )}
-              </Typography>
-            )}
-
-            {cameras.length === 0 && (
-              <Typography 
-                variant="body2" 
-                color="warning.main"
-              >
-                USB-камеры не найдены
-              </Typography>
-            )}
-          </Box>
-
-          {error && (
-            <Typography 
-              variant="body2" 
-              color="error"
-              sx={{ mt: 1 }}
-            >
-              {error}
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+              Убедитесь, что камеры подключены и доступны системе
             </Typography>
-          )}
-        </Paper>
+          </Paper>
+        ) : (
+          <Grid container spacing={3}>
+            {cameras.map((camera) => (
+              <Grid item xs={12} sm={6} md={4} lg={3} key={camera.id}>
+                <CameraFrame 
+                  camera={camera} 
+                  frameData={streamData[camera.id]}
+                />
+              </Grid>
+            ))}
+          </Grid>
+        )}
       </Box>
     </Box>
-  ), [
-    robotName,
-    theme,
-    selectedCamera,
-    cameras,
-    isConnected,
-    isStreaming,
-    error,
-    handleCameraChange,
-    fetchCameras
-  ]);
-
-  useEffect(() => {
-    fetchCameras();
-  }, [fetchCameras]);
-
-  useEffect(() => {
-    const connectWebSocket = () => {
-      const ws = new WebSocket('ws://localhost:3001/camera');
-      wsRef.current = ws;
-
-      ws.onopen = () => {
-        console.log('WebSocket подключен');
-        setIsConnected(true);
-        setError(null);
-        setIsStreaming(true);
-      };
-
-      ws.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data);
-          if (data.type === 'frame') {
-            drawFrame(data.data);
-          } else if (data.type === 'devices') {
-            setCameras(data.devices);
-            if (data.activeCamera !== undefined && data.activeCamera !== -1) {
-              setSelectedCamera(data.activeCamera);
-            }
-          }
-        } catch (err) {
-          console.error('Ошибка обработки сообщения:', err);
-        }
-      };
-
-      ws.onerror = (error) => {
-        console.error('WebSocket ошибка:', error);
-        setError('Ошибка подключения к стриму');
-        setIsConnected(false);
-        setIsStreaming(false);
-      };
-
-      ws.onclose = () => {
-        console.log('WebSocket отключен');
-        setIsConnected(false);
-        setIsStreaming(false);
-        setTimeout(connectWebSocket, 2000);
-      };
-    };
-
-    connectWebSocket();
-
-    return () => {
-      if (wsRef.current) {
-        wsRef.current.close();
-      }
-    };
-  }, [drawFrame]);
-
-  // Редирект на главную для мобильных устройств
-  useEffect(() => {
-    if (isMobile) {
-      navigate('/');
-    }
-  }, [isMobile, navigate]);
-
-  // Если мобильное устройство, не рендерим компонент
-  if (isMobile) {
-    return null;
-  }
-
-  return renderContent;
+  );
 };
 
 export default React.memo(CameraTest); 
