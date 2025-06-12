@@ -194,9 +194,31 @@ install_system_service() {
     
     # Проверяем права на скрипты
     info "Проверка прав на скрипты..."
-    chmod +x /home/unitree/control_robot/start_h1_unified.sh || warn "Не удалось установить права на start_h1_unified.sh"
-    chmod +x /home/unitree/control_robot/stop_h1.sh || warn "Не удалось установить права на stop_h1.sh"
-    chmod +x /home/unitree/control_robot/setup.sh || warn "Не удалось установить права на setup.sh"
+    
+    # Устанавливаем права на все скрипты
+    if [ -f "/home/unitree/control_robot/start_h1_unified.sh" ]; then
+        chmod +x /home/unitree/control_robot/start_h1_unified.sh || warn "Не удалось установить права на start_h1_unified.sh"
+        info "Права на start_h1_unified.sh установлены"
+    else
+        warn "Файл start_h1_unified.sh не найден"
+    fi
+    
+    if [ -f "/home/unitree/control_robot/stop_h1.sh" ]; then
+        chmod +x /home/unitree/control_robot/stop_h1.sh || warn "Не удалось установить права на stop_h1.sh"
+        info "Права на stop_h1.sh установлены"
+    else
+        warn "Файл stop_h1.sh не найден"
+    fi
+    
+    if [ -f "/home/unitree/control_robot/setup.sh" ]; then
+        chmod +x /home/unitree/control_robot/setup.sh || warn "Не удалось установить права на setup.sh"
+        info "Права на setup.sh установлены"
+    else
+        warn "Файл setup.sh не найден"
+    fi
+    
+    # Устанавливаем владельца на скрипты
+    chown unitree:unitree /home/unitree/control_robot/*.sh 2>/dev/null || warn "Не удалось изменить владельца скриптов"
 }
 
 # Функция для создания необходимых директорий и настройки прав

@@ -170,6 +170,27 @@ sudo systemctl daemon-reload
 sudo ./setup.sh
 ```
 
+### Проблемы с правами доступа
+```bash
+# Если сервис не запускается из-за "Permission denied"
+sudo chmod +x /home/unitree/control_robot/*.sh
+
+# Установка правильного владельца
+sudo chown unitree:unitree /home/unitree/control_robot/*.sh
+
+# Перезапуск сервиса
+sudo systemctl restart control_robot
+
+# Проверка статуса
+sudo systemctl status control_robot
+```
+
+### Быстрое исправление прав
+```bash
+# Использование скрипта для исправления прав
+sudo ./fix_permissions.sh
+```
+
 ## Автоматический запуск
 
 После установки системы через `setup.sh`, система будет автоматически запускаться при загрузке системы.

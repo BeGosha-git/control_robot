@@ -86,6 +86,17 @@ update_from_git() {
     if git fetch origin; then
         info "Получены обновления из репозитория"
         git reset --hard origin/main || warn "Не удалось обновить локальные файлы"
+        
+        # После обновления из Git устанавливаем права на скрипты
+        info "Установка прав на обновленные скрипты..."
+        chmod +x start_h1_unified.sh 2>/dev/null || warn "Не удалось установить права на start_h1_unified.sh"
+        chmod +x stop_h1.sh 2>/dev/null || warn "Не удалось установить права на stop_h1.sh"
+        chmod +x setup.sh 2>/dev/null || warn "Не удалось установить права на setup.sh"
+        
+        # Устанавливаем правильного владельца
+        chown unitree:unitree *.sh 2>/dev/null || warn "Не удалось изменить владельца скриптов"
+        
+        info "Права на скрипты обновлены"
     else
         warn "Не удалось получить обновления из репозитория"
     fi
