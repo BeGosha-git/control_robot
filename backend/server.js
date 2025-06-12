@@ -905,10 +905,25 @@ function startPythonService() {
     }
 
     const pythonPath = path.join(__dirname, 'src', 'services', 'camera_service.py');
+    const venvPython = path.join(__dirname, 'src', 'services', '.venv', 'bin', 'python');
     
     console.log('Запуск Python сервиса камер...');
-    pythonProcess = spawn('python3', [pythonPath], {
-        stdio: ['pipe', 'pipe', 'pipe']
+    
+    // Проверяем наличие виртуального окружения
+    let pythonExecutable = 'python3';
+    if (require('fs').existsSync(venvPython)) {
+        pythonExecutable = venvPython;
+        console.log('Используется виртуальное окружение Python');
+    } else {
+        console.log('Виртуальное окружение не найдено, используется системный Python3');
+    }
+    
+    pythonProcess = spawn(pythonExecutable, [pythonPath], {
+        stdio: ['pipe', 'pipe', 'pipe'],
+        env: {
+            ...process.env,
+            PYTHONPATH: path.join(__dirname, 'src', 'services')
+        }
     });
 
     pythonProcess.stdout.on('data', (data) => {

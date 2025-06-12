@@ -238,6 +238,51 @@ setup_directories_and_permissions() {
     fi
 }
 
+# Функция для установки Python зависимостей
+install_python_dependencies() {
+    log "Установка Python зависимостей..."
+    
+    # Создаем виртуальное окружение
+    info "Создание виртуального окружения Python..."
+    cd /home/unitree/control_robot/backend/src/services || error "Не удалось перейти в директорию services"
+    
+    # Удаляем старое виртуальное окружение если есть
+    if [ -d ".venv" ]; then
+        info "Удаление старого виртуального окружения..."
+        rm -rf .venv
+    fi
+    
+    # Создаем новое виртуальное окружение
+    python3 -m venv .venv || error "Не удалось создать виртуальное окружение"
+    
+    # Активируем виртуальное окружение и устанавливаем зависимости
+    info "Активация виртуального окружения и установка зависимостей..."
+    source .venv/bin/activate || error "Не удалось активировать виртуальное окружение"
+    
+    # Обновляем pip
+    pip install --upgrade pip || warn "Не удалось обновить pip"
+    
+    # Проверяем наличие requirements.txt
+    if [ -f "requirements.txt" ]; then
+        info "Найден requirements.txt, устанавливаем зависимости..."
+        pip install -r requirements.txt || warn "Не удалось установить зависимости из requirements.txt"
+    else
+        # Устанавливаем основные зависимости для camera_service.py
+        info "Установка основных Python зависимостей..."
+        pip install flask flask-cors opencv-python numpy || warn "Не удалось установить некоторые Python зависимости"
+    fi
+    
+    # Деактивируем виртуальное окружение
+    deactivate
+    
+    # Устанавливаем права на виртуальное окружение
+    chown -R unitree:unitree .venv || warn "Не удалось изменить владельца виртуального окружения"
+    
+    cd /home/unitree/control_robot || error "Не удалось вернуться в корневую директорию"
+    
+    info "Python зависимости установлены в виртуальном окружении"
+}
+
 # Основная логика
 main() {
     log "Установка и настройка системы H1..."
@@ -253,6 +298,9 @@ main() {
     
     # Установка зависимостей backend
     install_backend_dependencies
+    
+    # Установка Python зависимостей
+    install_python_dependencies
     
     # Настройка директорий и прав
     setup_directories_and_permissions

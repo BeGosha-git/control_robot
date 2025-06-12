@@ -72,6 +72,38 @@ fix_script_permissions() {
     info "Права на скрипты установлены"
 }
 
+# Функция для обновления Python зависимостей
+update_python_dependencies() {
+    log "Проверка и обновление Python зависимостей..."
+    
+    # Проверяем наличие виртуального окружения
+    if [ -d "/home/unitree/control_robot/backend/src/services/.venv" ]; then
+        info "Виртуальное окружение найдено, обновляем зависимости..."
+        
+        cd /home/unitree/control_robot/backend/src/services || warn "Не удалось перейти в директорию services"
+        
+        # Активируем виртуальное окружение
+        source .venv/bin/activate || warn "Не удалось активировать виртуальное окружение"
+        
+        # Обновляем pip
+        pip install --upgrade pip 2>/dev/null || warn "Не удалось обновить pip"
+        
+        # Обновляем зависимости
+        if [ -f "requirements.txt" ]; then
+            pip install -r requirements.txt --upgrade || warn "Не удалось обновить зависимости"
+        fi
+        
+        # Деактивируем виртуальное окружение
+        deactivate
+        
+        cd /home/unitree/control_robot || warn "Не удалось вернуться в корневую директорию"
+        
+        info "Python зависимости обновлены"
+    else
+        warn "Виртуальное окружение не найдено, пропускаем обновление"
+    fi
+}
+
 # Функция для обновления проекта из git
 update_from_git() {
     log "Проверка обновлений из Git..."
@@ -104,6 +136,9 @@ update_from_git() {
         
         # После обновления из Git устанавливаем права на скрипты
         fix_script_permissions
+        
+        # Обновление Python зависимостей
+        update_python_dependencies
     else
         warn "Не удалось получить обновления из репозитория"
     fi
@@ -378,6 +413,9 @@ main() {
     
     # Обновление из git
     update_from_git
+    
+    # Обновление Python зависимостей
+    update_python_dependencies
     
     # Проверка портов
     check_ports
