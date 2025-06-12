@@ -145,53 +145,48 @@ update_python_dependencies() {
 update_from_git() {
     log "Проверка обновлений из Git..."
     
-    # Обновление из git только если НЕ запущены через systemd
-    if [ -z "$SYSTEMD_EXEC_PID" ]; then
-        # Проверяем доступность интернета
-        if ! check_internet; then
-            warn "Нет подключения к интернету. Пропускаем обновление из Git."
-            return 0
+    # Проверяем доступность интернета
+    if ! check_internet; then
+        warn "Нет подключения к интернету. Пропускаем обновление из Git."
+        return 0
+    fi
+    
+    # Проверяем и настраиваем правильный remote origin
+    if [ "$(git remote get-url origin 2>/dev/null || echo "")" != "https://github.com/BeGosha-git/control_robot.git" ]; then
+        info "Настройка правильного Git репозитория..."
+        if [ -n "$(git remote get-url origin 2>/dev/null)" ]; then
+            git remote remove origin
         fi
+        git remote add origin "https://github.com/BeGosha-git/control_robot.git" || warn "Не удалось добавить remote origin"
+    fi
+    
+    # Сохраняем configs.conf если он существует
+    if [ -f "backend/configs.conf" ]; then
+        info "Сохранение configs.conf..."
+        cp backend/configs.conf /tmp/configs.conf.backup || warn "Не удалось сохранить configs.conf"
+    fi
+    
+    # Получаем последние изменения
+    if git fetch origin; then
+        info "Получены обновления из репозитория"
+        git reset --hard origin/main || warn "Не удалось обновить локальные файлы"
         
-        # Проверяем и настраиваем правильный remote origin
-        if [ "$(git remote get-url origin 2>/dev/null || echo "")" != "https://github.com/BeGosha-git/control_robot.git" ]; then
-            info "Настройка правильного Git репозитория..."
-            if [ -n "$(git remote get-url origin 2>/dev/null)" ]; then
-                git remote remove origin
-            fi
-            git remote add origin "https://github.com/BeGosha-git/control_robot.git" || warn "Не удалось добавить remote origin"
-        fi
-        
-        # Сохраняем configs.conf если он существует
-        if [ -f "backend/configs.conf" ]; then
-            info "Сохранение configs.conf..."
-            cp backend/configs.conf /tmp/configs.conf.backup || warn "Не удалось сохранить configs.conf"
-        fi
-        
-        # Получаем последние изменения
-        if git fetch origin; then
-            info "Получены обновления из репозитория"
-            git reset --hard origin/main || warn "Не удалось обновить локальные файлы"
-            
-            # После обновления из Git устанавливаем права на скрипты
-            fix_script_permissions
-        else
-            warn "Не удалось получить обновления из репозитория"
-        fi
-        
-        # Восстанавливаем configs.conf
-        if [ -f "/tmp/configs.conf.backup" ]; then
-            info "Восстановление configs.conf..."
-            cp /tmp/configs.conf.backup backend/configs.conf || warn "Не удалось восстановить configs.conf"
-            rm /tmp/configs.conf.backup
-        fi
-        
-        # Обновляем права на файлы только если запущены от root
-        if [ "$RUNNING_AS_ROOT" = true ]; then
-            chown -R unitree:unitree . || warn "Не удалось обновить владельца файлов"
-        fi
+        # После обновления из Git устанавливаем права на скрипты
+        fix_script_permissions
     else
-        info "Запуск через systemd, пропускаем обновление из Git"
+        warn "Не удалось получить обновления из репозитория"
+    fi
+    
+    # Восстанавливаем configs.conf
+    if [ -f "/tmp/configs.conf.backup" ]; then
+        info "Восстановление configs.conf..."
+        cp /tmp/configs.conf.backup backend/configs.conf || warn "Не удалось восстановить configs.conf"
+        rm /tmp/configs.conf.backup
+    fi
+    
+    # Обновляем права на файлы только если запущены от root
+    if [ "$RUNNING_AS_ROOT" = true ]; then
+        chown -R unitree:unitree . || warn "Не удалось обновить владельца файлов"
     fi
 }
 
