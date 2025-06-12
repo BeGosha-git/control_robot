@@ -242,8 +242,8 @@ stop_existing_processes() {
         rm -f /home/unitree/backend.pid
     fi
     
-    # Останавливаем все процессы node server.js (на случай если PID файл устарел)
-    PIDS=$(sudo -u unitree pgrep -f "node server.js" 2>/dev/null || true)
+    # Останавливаем все процессы npm start (на случай если PID файл устарел)
+    PIDS=$(sudo -u unitree pgrep -f "npm start" 2>/dev/null || true)
     if [ -n "$PIDS" ]; then
         info "Остановка дополнительных backend процессов: $PIDS"
         echo "$PIDS" | xargs -r sudo -u unitree kill 2>/dev/null || true
@@ -265,9 +265,9 @@ start_backend() {
     cd backend || error "Не удалось перейти в директорию backend"
     
     # Проверяем, не запущен ли уже backend
-    if [ -n "$(sudo -u unitree pgrep -f "node server.js" 2>/dev/null)" ]; then
+    if [ -n "$(sudo -u unitree pgrep -f "npm start" 2>/dev/null)" ]; then
         warn "Backend уже запущен. Остановка старого процесса..."
-        sudo -u unitree pkill -f "node server.js" 2>/dev/null || true
+        sudo -u unitree pkill -f "npm start" 2>/dev/null || true
         sleep 2
     fi
     
@@ -300,16 +300,22 @@ if [ ! -d "node_modules" ]; then
     npm install
 fi
 
-# Проверяем, что node доступен
+# Проверяем, что node и npm доступны
 if ! command -v node >/dev/null 2>&1; then
     echo "ОШИБКА: node не найден в PATH"
     echo "PATH: $PATH"
     exit 1
 fi
 
-# Запускаем сервер
-echo "Запуск Node.js сервера..."
-exec node server.js > /home/unitree/backend.log 2>&1
+if ! command -v npm >/dev/null 2>&1; then
+    echo "ОШИБКА: npm не найден в PATH"
+    echo "PATH: $PATH"
+    exit 1
+fi
+
+# Запускаем сервер через npm start
+echo "Запуск Node.js сервера через npm start..."
+exec npm start > /home/unitree/backend.log 2>&1
 EOF
     
     chmod +x "$TEMP_SCRIPT"
@@ -324,17 +330,17 @@ EOF
     
     # Проверяем, что процесс запущен и получаем его PID
     if kill -0 $BACKEND_PID 2>/dev/null; then
-        # Проверяем, что это действительно наш процесс node server.js
-        if sudo -u unitree pgrep -f "node server.js" | grep -q "$BACKEND_PID"; then
+        # Проверяем, что это действительно наш процесс npm start
+        if sudo -u unitree pgrep -f "npm start" | grep -q "$BACKEND_PID"; then
             echo $BACKEND_PID > /home/unitree/backend.pid
             info "Backend запущен (PID: $BACKEND_PID)"
         else
             # Проверяем логи для диагностики
             if [ -f "/home/unitree/backend.log" ]; then
-                error "Процесс запущен, но не является node server.js. Последние строки лога:"
+                error "Процесс запущен, но не является npm start. Последние строки лога:"
                 tail -10 /home/unitree/backend.log
             else
-                error "Процесс запущен, но не является node server.js. Лог-файл не создан."
+                error "Процесс запущен, но не является npm start. Лог-файл не создан."
             fi
         fi
     else
