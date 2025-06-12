@@ -432,6 +432,12 @@ main() {
         warn "Камера не обнаружена (/dev/video0)"
     fi
     
+    # Установка системного сервиса
+    install_system_service
+    
+    # Запуск системного сервиса
+    start_system_service
+
     # Запуск backend
     start_backend
     
@@ -440,12 +446,6 @@ main() {
     
     # Проверка сервисов
     check_services
-    
-    # Установка системного сервиса
-    install_system_service
-    
-    # Запуск системного сервиса
-    start_system_service
     
     # Финальное сообщение
     log "Установка успешно завершена!"
