@@ -7,6 +7,22 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
+# Функция для очистки временных файлов
+cleanup_temp_files() {
+    if [ -n "$NODE_SCRIPT" ] && [ -f "$NODE_SCRIPT" ]; then
+        rm -f "$NODE_SCRIPT"
+    fi
+    
+    if [ -n "$NPM_SCRIPT" ] && [ -f "$NPM_SCRIPT" ]; then
+        rm -f "$NPM_SCRIPT"
+    fi
+    
+    rm -f /tmp/nvm_*.sh 2>/dev/null || true
+}
+
+# Устанавливаем trap для очистки при выходе
+trap cleanup_temp_files EXIT
+
 # Функции для вывода сообщений
 log() {
     echo -e "${GREEN}[H1 Setup]${NC} $1"
@@ -111,6 +127,26 @@ update_from_git() {
     chown -R unitree:unitree . || warn "Не удалось обновить владельца файлов"
 }
 
+# Функция для создания временного скрипта nvm
+create_nvm_script() {
+    local script_type="$1"
+    local temp_script="/tmp/nvm_${script_type}_$$.sh"
+    
+    cat > "$temp_script" << 'EOF'
+#!/bin/bash
+source /home/unitree/.nvm/nvm.sh
+EOF
+    
+    if [ "$script_type" = "node" ]; then
+        echo "node \"\$@\"" >> "$temp_script"
+    elif [ "$script_type" = "npm" ]; then
+        echo "npm \"\$@\"" >> "$temp_script"
+    fi
+    
+    chmod +x "$temp_script"
+    echo "$temp_script"
+}
+
 # Функция для проверки и установки Node.js
 check_and_install_nodejs() {
     log "Проверка Node.js..."
@@ -119,23 +155,22 @@ check_and_install_nodejs() {
     if [ -d "/home/unitree/.nvm" ] && [ -f "/home/unitree/.nvm/nvm.sh" ]; then
         info "Обнаружен nvm. Загрузка окружения..."
         
-        # Загружаем nvm окружение
-        export NVM_DIR="/home/unitree/.nvm"
-        [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
-        [ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"
-        
         # Проверяем активную версию node
-        NVM_NODE_VERSION=$(sudo -u unitree bash -c "source $NVM_DIR/nvm.sh && nvm current" 2>/dev/null)
+        NVM_NODE_VERSION=$(sudo -u unitree bash -c "source /home/unitree/.nvm/nvm.sh && nvm current" 2>/dev/null)
         if [ -n "$NVM_NODE_VERSION" ] && [ "$NVM_NODE_VERSION" != "system" ]; then
             info "Активная версия nvm: $NVM_NODE_VERSION"
             
-            # Используем nvm версию
-            NODE_CMD="sudo -u unitree bash -c 'source $NVM_DIR/nvm.sh && node'"
-            NPM_CMD="sudo -u unitree bash -c 'source $NVM_DIR/nvm.sh && npm'"
+            # Создаем временные скрипты для node и npm
+            NODE_SCRIPT=$(create_nvm_script "node")
+            NPM_SCRIPT=$(create_nvm_script "npm")
+            
+            # Используем временные скрипты
+            NODE_CMD="sudo -u unitree $NODE_SCRIPT"
+            NPM_CMD="sudo -u unitree $NPM_SCRIPT"
             
             # Проверяем версии
-            NODE_VERSION=$(sudo -u unitree bash -c "source $NVM_DIR/nvm.sh && node --version" 2>/dev/null)
-            NPM_VERSION=$(sudo -u unitree bash -c "source $NVM_DIR/nvm.sh && npm --version" 2>/dev/null)
+            NODE_VERSION=$(sudo -u unitree bash -c "source /home/unitree/.nvm/nvm.sh && node --version" 2>/dev/null)
+            NPM_VERSION=$(sudo -u unitree bash -c "source /home/unitree/.nvm/nvm.sh && npm --version" 2>/dev/null)
             
             if [ -n "$NODE_VERSION" ] && [ -n "$NPM_VERSION" ]; then
                 info "Node.js версия: $NODE_VERSION"
@@ -144,6 +179,8 @@ check_and_install_nodejs() {
                 # Экспортируем команды для использования в других функциях
                 export NPM_CMD="$NPM_CMD"
                 export NODE_CMD="$NODE_CMD"
+                export NODE_SCRIPT="$NODE_SCRIPT"
+                export NPM_SCRIPT="$NPM_SCRIPT"
                 return 0
             fi
         else
