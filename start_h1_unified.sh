@@ -344,6 +344,12 @@ check_services() {
 start_system_service() {
     log "Запуск системного сервиса..."
     
+    # Если запущены через systemd, не пытаемся запустить сервис
+    if [ -n "$SYSTEMD_EXEC_PID" ]; then
+        info "Запущены через systemd, пропускаем запуск сервиса"
+        return 0
+    fi
+    
     if systemctl is-active control_robot.service > /dev/null 2>&1; then
         info "Системный сервис уже запущен"
     else
