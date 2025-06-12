@@ -309,62 +309,89 @@ install_system_service() {
     log "Проверка системного сервиса..."
     
     # Проверяем наличие файла сервиса
-    if [ ! -f "h1-control.service" ]; then
-        warn "Файл сервиса h1-control.service не найден"
+    if [ ! -f "control_robot.service" ]; then
+        warn "Файл сервиса control_robot.service не найден"
         return 0
     fi
     
     # Проверяем, установлен ли сервис
-    if [ -f "/etc/systemd/system/h1-control.service" ]; then
+    if [ -f "/etc/systemd/system/control_robot.service" ]; then
         info "Системный сервис уже установлен"
         
+        # Проверяем, есть ли изменения в файле сервиса
+        if ! cmp -s "control_robot.service" "/etc/systemd/system/control_robot.service"; then
+            info "Обнаружены изменения в файле сервиса. Обновление..."
+            
+            # Копируем новый файл сервиса
+            cp control_robot.service /etc/systemd/system/ || error "Не удалось скопировать файл сервиса"
+            chmod 644 /etc/systemd/system/control_robot.service || error "Не удалось установить права на файл сервиса"
+            
+            # Перезагружаем systemd
+            systemctl daemon-reload || error "Не удалось перезагрузить systemd"
+            
+            # Перезапускаем сервис если он запущен
+            if systemctl is-active control_robot.service > /dev/null 2>&1; then
+                info "Перезапуск сервиса..."
+                systemctl restart control_robot.service || warn "Не удалось перезапустить сервис"
+            fi
+            
+            info "Сервис обновлен"
+        else
+            info "Изменений в файле сервиса нет"
+        fi
+        
         # Проверяем, включен ли автозапуск
-        if systemctl is-enabled h1-control.service > /dev/null 2>&1; then
+        if systemctl is-enabled control_robot.service > /dev/null 2>&1; then
             info "Автозапуск сервиса уже включен"
         else
             info "Включение автозапуска сервиса..."
-            systemctl enable h1-control.service || warn "Не удалось включить автозапуск сервиса"
+            systemctl enable control_robot.service || warn "Не удалось включить автозапуск сервиса"
         fi
     else
         info "Установка системного сервиса..."
         
         # Копируем файл сервиса
-        cp h1-control.service /etc/systemd/system/ || error "Не удалось скопировать файл сервиса"
-        chmod 644 /etc/systemd/system/h1-control.service || error "Не удалось установить права на файл сервиса"
+        cp control_robot.service /etc/systemd/system/ || error "Не удалось скопировать файл сервиса"
+        chmod 644 /etc/systemd/system/control_robot.service || error "Не удалось установить права на файл сервиса"
         
         # Перезагружаем systemd
         systemctl daemon-reload || error "Не удалось перезагрузить systemd"
         
         # Включаем автозапуск
-        systemctl enable h1-control.service || error "Не удалось включить сервис"
+        systemctl enable control_robot.service || error "Не удалось включить сервис"
         
         info "Системный сервис установлен и включен"
     fi
     
     # Создание и настройка лог-файла
-    if [ ! -f "/home/unitree/h1_control.log" ]; then
+    if [ ! -f "/home/unitree/control_robot.log" ]; then
         info "Создание лог-файла..."
-        touch /home/unitree/h1_control.log || error "Не удалось создать лог-файл"
-        chown unitree:unitree /home/unitree/h1_control.log || error "Не удалось изменить владельца лог-файла"
-        chmod 644 /home/unitree/h1_control.log || error "Не удалось установить права на лог-файл"
+        touch /home/unitree/control_robot.log || error "Не удалось создать лог-файл"
+        chown unitree:unitree /home/unitree/control_robot.log || error "Не удалось изменить владельца лог-файла"
+        chmod 644 /home/unitree/control_robot.log || error "Не удалось установить права на лог-файл"
     fi
+    
+    # Проверяем права на скрипты
+    info "Проверка прав на скрипты..."
+    chmod +x /home/unitree/control_robot/start_h1_unified.sh || warn "Не удалось установить права на start_h1_unified.sh"
+    chmod +x /home/unitree/control_robot/stop_h1.sh || warn "Не удалось установить права на stop_h1.sh"
 }
 
 # Функция для запуска системного сервиса
 start_system_service() {
     log "Запуск системного сервиса..."
     
-    if systemctl is-active h1-control.service > /dev/null 2>&1; then
+    if systemctl is-active control_robot.service > /dev/null 2>&1; then
         info "Системный сервис уже запущен"
     else
         info "Запуск системного сервиса..."
-        systemctl start h1-control.service || error "Не удалось запустить системный сервис"
+        systemctl start control_robot.service || error "Не удалось запустить системный сервис"
         
         # Ждем немного для запуска
         sleep 3
         
         # Проверяем статус
-        if systemctl is-active h1-control.service > /dev/null 2>&1; then
+        if systemctl is-active control_robot.service > /dev/null 2>&1; then
             info "Системный сервис успешно запущен"
         else
             error "Системный сервис не запустился"
@@ -431,12 +458,12 @@ main() {
     echo "Остановка: ./stop_h1.sh"
     echo "Перезапуск: sudo ./start_h1_unified.sh"
     echo -e "\n${YELLOW}Управление системным сервисом:${NC}"
-    echo "Статус:    sudo systemctl status h1-control"
-    echo "Логи:      sudo journalctl -u h1-control -f"
-    echo "Перезапуск: sudo systemctl restart h1-control"
-    echo "Остановка:  sudo systemctl stop h1-control"
-    echo "Автозапуск: sudo systemctl enable h1-control"
-    echo "Отключение: sudo systemctl disable h1-control"
+    echo "Статус:    sudo systemctl status control_robot"
+    echo "Логи:      sudo journalctl -u control_robot -f"
+    echo "Перезапуск: sudo systemctl restart control_robot"
+    echo "Остановка:  sudo systemctl stop control_robot"
+    echo "Автозапуск: sudo systemctl enable control_robot"
+    echo "Отключение: sudo systemctl disable control_robot"
 }
 
 # Запуск основной функции
