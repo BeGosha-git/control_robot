@@ -483,11 +483,23 @@ main() {
     log "Настройка маршрутизации для робота H1..."
     sudo ip route add default via 192.168.123.1 2>/dev/null || warn "Маршрут уже существует или не удалось добавить"
     
-    # Обновление из git
-    update_from_git
+    # Проверяем аргументы командной строки
+    FORCE_UPDATE=false
+    if [ "$1" = "--update" ] || [ "$1" = "-u" ]; then
+        FORCE_UPDATE=true
+        info "Принудительное обновление включено"
+    fi
     
-    # Обновление Python зависимостей
-    update_python_dependencies
+    # Обновление из git только если НЕ запущены через systemd или принудительное обновление
+    if [ -z "$SYSTEMD_EXEC_PID" ] || [ "$FORCE_UPDATE" = true ]; then
+        log "Обновляем из Git..."
+        update_from_git
+        
+        # Обновление Python зависимостей
+        update_python_dependencies
+    else
+        info "Запуск через systemd, пропускаем обновление из Git и Python зависимостей"
+    fi
     
     # Проверка портов
     check_ports
@@ -517,6 +529,7 @@ main() {
     echo "Логи frontend: docker compose logs -f"
     echo "Остановка: ./stop_h1.sh"
     echo "Перезапуск: sudo ./start_h1_unified.sh"
+    echo "Обновление: sudo ./start_h1_unified.sh --update"
     echo -e "\n${YELLOW}Управление системным сервисом:${NC}"
     echo "Статус:    sudo systemctl status control_robot"
     echo "Логи:      sudo journalctl -u control_robot -f"
@@ -527,4 +540,4 @@ main() {
 }
 
 # Запуск основной функции
-main 
+main "$@" 
