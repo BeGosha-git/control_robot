@@ -186,7 +186,7 @@ update_from_git() {
     
     # Обновляем права на файлы только если запущены от root
     if [ "$RUNNING_AS_ROOT" = true ]; then
-        chown -R unitree:unitree . || warn "Не удалось обновить владельца файлов"
+    chown -R unitree:unitree . || warn "Не удалось обновить владельца файлов"
     fi
 }
 
@@ -233,9 +233,9 @@ stop_existing_processes() {
     # Остановка системного сервиса (только при ручном запуске)
     if [ -z "$SYSTEMD_EXEC_PID" ]; then
         if systemctl is-active control_robot.service > /dev/null 2>&1; then
-            info "Остановка системного сервиса..."
+        info "Остановка системного сервиса..."
             systemctl stop control_robot.service || warn "Не удалось остановить системный сервис"
-            sleep 2
+        sleep 2
         fi
     else
         info "Автозапуск через systemd - пропускаем остановку системного сервиса"
@@ -247,23 +247,61 @@ stop_existing_processes() {
     # Агрессивная очистка портов 3001 и 5000
     info "Очистка портов 3001 и 5000..."
     
-    # Находим и убиваем процессы на порту 3001
+    # Используем lsof для поиска процессов (если доступен)
+    if command -v lsof >/dev/null 2>&1; then
+        # Находим и убиваем процессы на порту 3001 через lsof
+        LSOF_3001_PIDS=$(lsof -ti:3001 2>/dev/null || true)
+        if [ -n "$LSOF_3001_PIDS" ]; then
+            info "Найдены процессы на порту 3001 (lsof): $LSOF_3001_PIDS"
+            echo "$LSOF_3001_PIDS" | xargs -r kill -9 2>/dev/null || true
+            sleep 1
+        fi
+        
+        # Находим и убиваем процессы на порту 5000 через lsof
+        LSOF_5000_PIDS=$(lsof -ti:5000 2>/dev/null || true)
+        if [ -n "$LSOF_5000_PIDS" ]; then
+            info "Найдены процессы на порту 5000 (lsof): $LSOF_5000_PIDS"
+            echo "$LSOF_5000_PIDS" | xargs -r kill -9 2>/dev/null || true
+            sleep 1
+        fi
+    fi
+    
+    # Находим и убиваем процессы на порту 3001 через ss
     PORT_3001_PIDS=$(ss -tulpn 2>/dev/null | grep ":3001 " | awk '{print $7}' | sed 's/.*pid=\([0-9]*\).*/\1/' | sort -u)
     if [ -n "$PORT_3001_PIDS" ]; then
-        info "Найдены процессы на порту 3001: $PORT_3001_PIDS"
+        info "Найдены процессы на порту 3001 (ss): $PORT_3001_PIDS"
         echo "$PORT_3001_PIDS" | xargs -r kill -9 2>/dev/null || true
         sleep 1
     fi
     
-    # Находим и убиваем процессы на порту 5000
+    # Находим и убиваем процессы на порту 5000 через ss
     PORT_5000_PIDS=$(ss -tulpn 2>/dev/null | grep ":5000 " | awk '{print $7}' | sed 's/.*pid=\([0-9]*\).*/\1/' | sort -u)
     if [ -n "$PORT_5000_PIDS" ]; then
-        info "Найдены процессы на порту 5000: $PORT_5000_PIDS"
+        info "Найдены процессы на порту 5000 (ss): $PORT_5000_PIDS"
         echo "$PORT_5000_PIDS" | xargs -r kill -9 2>/dev/null || true
         sleep 1
     fi
     
-    # Остановка всех backend процессов (более надежно)
+    # Используем netstat как fallback (если доступен)
+    if command -v netstat >/dev/null 2>&1; then
+        # Находим и убиваем процессы на порту 3001 через netstat
+        NETSTAT_3001_PIDS=$(netstat -tulpn 2>/dev/null | grep ":3001 " | awk '{print $7}' | sed 's/.*\/\([0-9]*\).*/\1/' | sort -u)
+        if [ -n "$NETSTAT_3001_PIDS" ]; then
+            info "Найдены процессы на порту 3001 (netstat): $NETSTAT_3001_PIDS"
+            echo "$NETSTAT_3001_PIDS" | xargs -r kill -9 2>/dev/null || true
+            sleep 1
+        fi
+        
+        # Находим и убиваем процессы на порту 5000 через netstat
+        NETSTAT_5000_PIDS=$(netstat -tulpn 2>/dev/null | grep ":5000 " | awk '{print $7}' | sed 's/.*\/\([0-9]*\).*/\1/' | sort -u)
+        if [ -n "$NETSTAT_5000_PIDS" ]; then
+            info "Найдены процессы на порту 5000 (netstat): $NETSTAT_5000_PIDS"
+            echo "$NETSTAT_5000_PIDS" | xargs -r kill -9 2>/dev/null || true
+            sleep 1
+        fi
+    fi
+    
+    # Останавливаем все backend процессов (более надежно)
     info "Остановка всех backend процессов..."
     
     # Останавливаем процессы по PID файлу
@@ -339,19 +377,32 @@ start_backend() {
     
     # Проверяем, что порт 3001 свободен
     info "Проверка доступности порта 3001..."
-    for i in {1..10}; do
+    for i in {1..15}; do
         if ! ss -tuln 2>/dev/null | grep -q ":3001 "; then
-            info "Порт 3001 свободен"
-            break
+            # Дополнительная проверка через lsof если доступен
+            if command -v lsof >/dev/null 2>&1; then
+                if ! lsof -ti:3001 >/dev/null 2>&1; then
+                    info "Порт 3001 свободен (проверено через ss и lsof)"
+                    break
+                else
+                    warn "Порт 3001 занят (lsof) (попытка $i/15). Ожидание..."
+                    sleep 3
+                fi
+            else
+                info "Порт 3001 свободен"
+                break
+            fi
         else
-            warn "Порт 3001 все еще занят (попытка $i/10). Ожидание..."
-            sleep 2
+            warn "Порт 3001 все еще занят (ss) (попытка $i/15). Ожидание..."
+            sleep 3
         fi
     done
     
     # Финальная проверка порта
     if ss -tuln 2>/dev/null | grep -q ":3001 "; then
-        error "Порт 3001 все еще занят после ожидания. Не удается запустить backend."
+        warn "Порт 3001 все еще занят после ожидания. Backend попробует запуститься на другом порту."
+    else
+        info "Порт 3001 готов для запуска backend"
     fi
     
     # Запуск backend в фоне через nvm
@@ -416,7 +467,7 @@ EOF
         # Проверяем, что это действительно наш процесс npm start
         if sudo -u unitree pgrep -f "npm start" | grep -q "$BACKEND_PID"; then
             echo $BACKEND_PID > /home/unitree/backend.pid
-            info "Backend запущен (PID: $BACKEND_PID)"
+        info "Backend запущен (PID: $BACKEND_PID)"
         else
             # Проверяем логи для диагностики
             if [ -f "/home/unitree/backend.log" ]; then
@@ -611,7 +662,7 @@ main() {
     # Настройка маршрутизации для робота H1 (в самом начале)
     log "Настройка маршрутизации для робота H1..."
     sudo ip route add default via 192.168.123.1 2>/dev/null || warn "Маршрут уже существует или не удалось добавить"
-
+    
     update_from_git
     
     # ВСЕГДА проверяем Python зависимости (даже при запуске через systemd)
