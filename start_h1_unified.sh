@@ -197,8 +197,25 @@ check_ports() {
     # Проверяем порт 3001 (backend)
     if ss -tuln 2>/dev/null | grep -q ":3001 "; then
         warn "Порт 3001 уже занят. Возможно, старый backend все еще работает."
+        # Показываем информацию о процессе
+        PORT_3001_INFO=$(ss -tulpn 2>/dev/null | grep ":3001 " | head -1)
+        if [ -n "$PORT_3001_INFO" ]; then
+            info "Информация о процессе на порту 3001: $PORT_3001_INFO"
+        fi
     else
         info "Порт 3001 свободен"
+    fi
+    
+    # Проверяем порт 5000 (Python сервис камер)
+    if ss -tuln 2>/dev/null | grep -q ":5000 "; then
+        warn "Порт 5000 уже занят. Возможно, старый Python сервис камер все еще работает."
+        # Показываем информацию о процессе
+        PORT_5000_INFO=$(ss -tulpn 2>/dev/null | grep ":5000 " | head -1)
+        if [ -n "$PORT_5000_INFO" ]; then
+            info "Информация о процессе на порту 5000: $PORT_5000_INFO"
+        fi
+    else
+        info "Порт 5000 свободен"
     fi
     
     # Проверяем порт 80 (frontend)
@@ -227,6 +244,25 @@ stop_existing_processes() {
     # Остановка Docker контейнеров
     docker compose down 2>/dev/null || true
     
+    # Агрессивная очистка портов 3001 и 5000
+    info "Очистка портов 3001 и 5000..."
+    
+    # Находим и убиваем процессы на порту 3001
+    PORT_3001_PIDS=$(ss -tulpn 2>/dev/null | grep ":3001 " | awk '{print $7}' | sed 's/.*pid=\([0-9]*\).*/\1/' | sort -u)
+    if [ -n "$PORT_3001_PIDS" ]; then
+        info "Найдены процессы на порту 3001: $PORT_3001_PIDS"
+        echo "$PORT_3001_PIDS" | xargs -r kill -9 2>/dev/null || true
+        sleep 1
+    fi
+    
+    # Находим и убиваем процессы на порту 5000
+    PORT_5000_PIDS=$(ss -tulpn 2>/dev/null | grep ":5000 " | awk '{print $7}' | sed 's/.*pid=\([0-9]*\).*/\1/' | sort -u)
+    if [ -n "$PORT_5000_PIDS" ]; then
+        info "Найдены процессы на порту 5000: $PORT_5000_PIDS"
+        echo "$PORT_5000_PIDS" | xargs -r kill -9 2>/dev/null || true
+        sleep 1
+    fi
+    
     # Остановка всех backend процессов (более надежно)
     info "Остановка всех backend процессов..."
     
@@ -250,12 +286,43 @@ stop_existing_processes() {
         echo "$PIDS" | xargs -r sudo -u unitree kill -9 2>/dev/null || true
     fi
     
+    # Останавливаем все процессы node server.js
+    NODE_PIDS=$(sudo -u unitree pgrep -f "node server.js" 2>/dev/null || true)
+    if [ -n "$NODE_PIDS" ]; then
+        info "Остановка процессов node server.js: $NODE_PIDS"
+        echo "$NODE_PIDS" | xargs -r sudo -u unitree kill 2>/dev/null || true
+        sleep 2
+        echo "$NODE_PIDS" | xargs -r sudo -u unitree kill -9 2>/dev/null || true
+    fi
+    
+    # Останавливаем все Python процессы camera_service
+    PYTHON_PIDS=$(sudo -u unitree pgrep -f "camera_service" 2>/dev/null || true)
+    if [ -n "$PYTHON_PIDS" ]; then
+        info "Остановка Python процессов camera_service: $PYTHON_PIDS"
+        echo "$PYTHON_PIDS" | xargs -r sudo -u unitree kill 2>/dev/null || true
+        sleep 2
+        echo "$PYTHON_PIDS" | xargs -r sudo -u unitree kill -9 2>/dev/null || true
+    fi
+    
     # Очищаем временные файлы
     rm -f /tmp/start_backend.sh 2>/dev/null || true
     rm -f /tmp/nvm_*.sh 2>/dev/null || true
     
     # Ждем немного для полной остановки
-    sleep 1
+    sleep 2
+    
+    # Финальная проверка портов
+    if ss -tulpn 2>/dev/null | grep -q ":3001 "; then
+        warn "Порт 3001 все еще занят после очистки"
+    else
+        info "Порт 3001 освобожден"
+    fi
+    
+    if ss -tulpn 2>/dev/null | grep -q ":5000 "; then
+        warn "Порт 5000 все еще занят после очистки"
+    else
+        info "Порт 5000 освобожден"
+    fi
 }
 
 # Функция для запуска backend
@@ -268,6 +335,23 @@ start_backend() {
         warn "Backend уже запущен. Остановка старого процесса..."
         sudo -u unitree pkill -f "npm start" 2>/dev/null || true
         sleep 2
+    fi
+    
+    # Проверяем, что порт 3001 свободен
+    info "Проверка доступности порта 3001..."
+    for i in {1..10}; do
+        if ! ss -tuln 2>/dev/null | grep -q ":3001 "; then
+            info "Порт 3001 свободен"
+            break
+        else
+            warn "Порт 3001 все еще занят (попытка $i/10). Ожидание..."
+            sleep 2
+        fi
+    done
+    
+    # Финальная проверка порта
+    if ss -tuln 2>/dev/null | grep -q ":3001 "; then
+        error "Порт 3001 все еще занят после ожидания. Не удается запустить backend."
     fi
     
     # Запуск backend в фоне через nvm
