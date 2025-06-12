@@ -9,8 +9,12 @@ NC='\033[0m' # No Color
 
 # Функция для очистки временных файлов
 cleanup_temp_files() {
-    # Удаляем другие временные файлы nvm (если есть)
+    # Удаляем временные файлы backend
+    rm -f /tmp/start_backend_*.sh 2>/dev/null || true
     rm -f /tmp/nvm_*.sh 2>/dev/null || true
+    
+    # Удаляем другие временные файлы
+    rm -f /tmp/configs.conf.backup 2>/dev/null || true
 }
 
 # Устанавливаем trap для очистки при выходе
@@ -161,21 +165,43 @@ install_backend_dependencies() {
     cd ..
 }
 
+# Функция для проверки портов
+check_ports() {
+    log "Проверка портов..."
+    
+    # Проверяем порт 3001 (backend)
+    if netstat -tuln 2>/dev/null | grep -q ":3001 "; then
+        warn "Порт 3001 уже занят. Возможно, старый backend все еще работает."
+    else
+        info "Порт 3001 свободен"
+    fi
+    
+    # Проверяем порт 80 (frontend)
+    if netstat -tuln 2>/dev/null | grep -q ":80 "; then
+        warn "Порт 80 уже занят. Возможно, старый frontend все еще работает."
+    else
+        info "Порт 80 свободен"
+    fi
+}
+
 # Функция для остановки существующих процессов
 stop_existing_processes() {
     log "Остановка существующих процессов..."
     
     # Остановка системного сервиса (если запущен)
-    if systemctl is-active h1-control.service > /dev/null 2>&1; then
+    if systemctl is-active control_robot.service > /dev/null 2>&1; then
         info "Остановка системного сервиса..."
-        systemctl stop h1-control.service || warn "Не удалось остановить системный сервис"
+        systemctl stop control_robot.service || warn "Не удалось остановить системный сервис"
         sleep 2
     fi
     
     # Остановка Docker контейнеров
     docker compose down 2>/dev/null || true
     
-    # Остановка backend процесса
+    # Остановка всех backend процессов (более надежно)
+    info "Остановка всех backend процессов..."
+    
+    # Останавливаем процессы по PID файлу
     if [ -f "/home/unitree/backend.pid" ]; then
         if kill -0 $(cat /home/unitree/backend.pid) 2>/dev/null; then
             info "Остановка backend процесса (PID: $(cat /home/unitree/backend.pid))..."
@@ -185,6 +211,22 @@ stop_existing_processes() {
         fi
         rm -f /home/unitree/backend.pid
     fi
+    
+    # Останавливаем все процессы node server.js (на случай если PID файл устарел)
+    PIDS=$(pgrep -f "node server.js" 2>/dev/null || true)
+    if [ -n "$PIDS" ]; then
+        info "Остановка дополнительных backend процессов: $PIDS"
+        echo "$PIDS" | xargs kill 2>/dev/null || true
+        sleep 2
+        echo "$PIDS" | xargs kill -9 2>/dev/null || true
+    fi
+    
+    # Очищаем временные файлы
+    rm -f /tmp/start_backend.sh 2>/dev/null || true
+    rm -f /tmp/nvm_*.sh 2>/dev/null || true
+    
+    # Ждем немного для полной остановки
+    sleep 1
 }
 
 # Функция для запуска backend
@@ -192,33 +234,49 @@ start_backend() {
     log "Запуск backend..."
     cd backend || error "Не удалось перейти в директорию backend"
     
+    # Проверяем, не запущен ли уже backend
+    if [ -n "$(pgrep -f "node server.js" 2>/dev/null)" ]; then
+        warn "Backend уже запущен. Остановка старого процесса..."
+        pkill -f "node server.js" 2>/dev/null || true
+        sleep 2
+    fi
+    
     # Запуск backend в фоне через nvm
     info "Запуск backend через nvm..."
     
-    # Создаем временный скрипт для запуска
-    cat > /tmp/start_backend.sh << 'EOF'
+    # Создаем временный скрипт для запуска с уникальным именем
+    TEMP_SCRIPT="/tmp/start_backend_$$.sh"
+    cat > "$TEMP_SCRIPT" << 'EOF'
 #!/bin/bash
 source /home/unitree/.nvm/nvm.sh
 cd /home/unitree/control_robot/backend
 exec node server.js > /home/unitree/backend.log 2>&1
 EOF
     
-    chmod +x /tmp/start_backend.sh
+    chmod +x "$TEMP_SCRIPT"
     
     # Запускаем через sudo -u unitree
-    sudo -u unitree /tmp/start_backend.sh &
+    sudo -u unitree "$TEMP_SCRIPT" &
+    BACKEND_PID=$!
     
-    # Получаем PID процесса
+    # Ждем немного для запуска
     sleep 3
-    if [ -n "$(pgrep -f "node server.js" | head -1)" ]; then
-        echo $(pgrep -f "node server.js" | head -1) > /home/unitree/backend.pid
-        info "Backend запущен (PID: $(cat /home/unitree/backend.pid))"
+    
+    # Проверяем, что процесс запущен и получаем его PID
+    if kill -0 $BACKEND_PID 2>/dev/null; then
+        # Проверяем, что это действительно наш процесс node server.js
+        if pgrep -f "node server.js" | grep -q "$BACKEND_PID"; then
+            echo $BACKEND_PID > /home/unitree/backend.pid
+            info "Backend запущен (PID: $BACKEND_PID)"
+        else
+            error "Процесс запущен, но не является node server.js"
+        fi
     else
         error "Не удалось запустить backend"
     fi
     
     # Очищаем временный файл
-    rm -f /tmp/start_backend.sh
+    rm -f "$TEMP_SCRIPT"
     
     cd ..
 }
@@ -415,6 +473,9 @@ main() {
     
     # Установка зависимостей backend
     install_backend_dependencies
+    
+    # Проверка портов
+    check_ports
     
     # Остановка существующих процессов
     stop_existing_processes
