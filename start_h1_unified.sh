@@ -48,13 +48,13 @@ if [ "$EUID" -eq 0 ]; then
     # Запуск от root - все нормально
     RUNNING_AS_ROOT=true
     info "Запуск от root пользователя"
-elif [ "$USER" = "unitree" ] && [ -n "$SYSTEMD_EXEC_PID" ]; then
-    # Запуск от unitree через systemd - тоже нормально
+elif [ "$USER" = "unitree" ]; then
+    # Запуск от unitree - тоже нормально
     RUNNING_AS_ROOT=false
-    info "Запуск от пользователя unitree через systemd"
+    info "Запуск от пользователя unitree"
 else
     # Запуск от обычного пользователя без sudo
-    error "Этот скрипт должен быть запущен с правами root (sudo) или через systemd"
+    error "Этот скрипт должен быть запущен с правами root (sudo) или от пользователя unitree"
 fi
 
 # Функция для установки прав на скрипты
@@ -213,8 +213,8 @@ check_ports() {
 stop_existing_processes() {
     log "Остановка существующих процессов..."
     
-    # Остановка системного сервиса (если запущен) - только если НЕ запущены через systemd
-    if [ -z "$SYSTEMD_EXEC_PID" ] && systemctl is-active control_robot.service > /dev/null 2>&1; then
+    # Остановка системного сервиса (если запущен)
+    if systemctl is-active control_robot.service > /dev/null 2>&1; then
         info "Остановка системного сервиса..."
         systemctl stop control_robot.service || warn "Не удалось остановить системный сервис"
         sleep 2
@@ -362,8 +362,8 @@ start_frontend() {
     if docker images | grep -q "h1_site-frontend"; then
         info "Docker образ найден"
         
-        # Проверяем, были ли обновления из Git (если есть интернет и НЕ запущены через systemd)
-        if check_internet && [ -z "$SYSTEMD_EXEC_PID" ]; then
+        # Проверяем, были ли обновления из Git (если есть интернет)
+        if check_internet; then
             # Проверяем, есть ли изменения в frontend директории
             if git status --porcelain frontend/ | grep -q .; then
                 info "Обнаружены изменения в frontend. Пересборка образа..."
@@ -385,12 +385,8 @@ start_frontend() {
                 docker compose up -d || error "Ошибка при запуске frontend контейнера"
             fi
         else
-            # Нет интернета или запуск через systemd - запускаем существующий образ
-            if [ -n "$SYSTEMD_EXEC_PID" ]; then
-                info "Запуск через systemd. Запуск существующего образа..."
-            else
-                info "Нет интернета. Запуск существующего образа..."
-            fi
+            # Нет интернета - запускаем существующий образ
+            info "Нет интернета. Запуск существующего образа..."
             docker compose up -d || error "Ошибка при запуске frontend контейнера"
         fi
     else
@@ -442,12 +438,6 @@ check_services() {
 # Функция для запуска системного сервиса
 start_system_service() {
     log "Запуск системного сервиса..."
-    
-    # Если запущены через systemd, не пытаемся запустить сервис
-    if [ -n "$SYSTEMD_EXEC_PID" ]; then
-        info "Запущены через systemd, пропускаем запуск сервиса"
-        return 0
-    fi
     
     if systemctl is-active control_robot.service > /dev/null 2>&1; then
         info "Системный сервис уже запущен"

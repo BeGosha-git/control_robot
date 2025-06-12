@@ -20,7 +20,6 @@ SyslogIdentifier=control_robot
 # Переменные окружения
 Environment=NODE_ENV=production
 Environment=HOME=/home/unitree
-Environment=SYSTEMD_EXEC_PID=1
 Environment=PATH=/home/unitree/.nvm/versions/node/v18.19.0/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 Environment=NVM_DIR=/home/unitree/.nvm
 Environment=VIRTUAL_ENV=/home/unitree/control_robot/backend/src/services/.venv

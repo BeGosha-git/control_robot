@@ -21,12 +21,12 @@ error() {
 
 log "Остановка H1 сервисов..."
 
-# Остановка системного сервиса (если запущен не через systemd)
-if [ -z "$SYSTEMD_EXEC_PID" ] && systemctl is-active control_robot.service > /dev/null 2>&1; then
+# Остановка системного сервиса (если запущен)
+if systemctl is-active control_robot.service > /dev/null 2>&1; then
     log "Остановка системного сервиса..."
     systemctl stop control_robot.service || warn "Не удалось остановить системный сервис"
 else
-    warn "Системный сервис не запущен или запущен через systemd"
+    warn "Системный сервис не запущен"
 fi
 
 # Остановка Docker контейнеров
@@ -58,8 +58,8 @@ else
     warn "PID файл backend не найден"
 fi
 
-# Останавливаем все процессы node server.js
-PIDS=$(pgrep -f "node server.js" 2>/dev/null || true)
+# Останавливаем все процессы npm start
+PIDS=$(pgrep -f "npm start" 2>/dev/null || true)
 if [ -n "$PIDS" ]; then
     log "Остановка дополнительных backend процессов: $PIDS"
     echo "$PIDS" | xargs kill 2>/dev/null || true
