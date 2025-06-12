@@ -81,7 +81,7 @@ check_python3() {
     fi
     
     # Проверка наличия python3-venv
-    if ! python3 -c "import venv" 2>/dev/null; then
+    if ! dpkg -l | grep -q python3-venv; then
         warn "python3-venv не установлен. Установка..."
         apt update || error "Не удалось обновить пакеты"
         apt install -y python3-venv || error "Не удалось установить python3-venv"
@@ -252,12 +252,14 @@ setup_directories_and_permissions() {
 install_python_dependencies() {
     log "Установка Python зависимостей..."
     
-    # Проверка наличия python3-venv
-    if ! python3 -c "import venv" 2>/dev/null; then
+    # Проверка и установка python3-venv
+    if ! dpkg -l | grep -q python3-venv; then
         warn "python3-venv не установлен. Установка..."
         apt update || error "Не удалось обновить пакеты"
         apt install -y python3-venv || error "Не удалось установить python3-venv"
         info "python3-venv установлен"
+    else
+        info "python3-venv уже установлен"
     fi
     
     # Удаляем старое виртуальное окружение если есть
@@ -269,35 +271,40 @@ install_python_dependencies() {
     fi
     
     # Создаем новое виртуальное окружение
-    python3 -m venv /home/unitree/control_robot/backend/src/services/.venv || error "Не удалось создать виртуальное окружение"
-    
-    # Сразу меняем права на виртуальное окружение
-    chown -R unitree:unitree /home/unitree/control_robot/backend/src/services/.venv || error "Не удалось изменить права на виртуальное окружение"
-    
-    # Активируем виртуальное окружение и устанавливаем зависимости
-    info "Активация виртуального окружения и установка зависимостей..."
-    source /home/unitree/control_robot/backend/src/services/.venv/bin/activate || error "Не удалось активировать виртуальное окружение"
-    
-    # Обновляем pip
-    pip install --upgrade pip || warn "Не удалось обновить pip"
-    
-    # Проверяем наличие requirements.txt в services директории
-    if [ -f "/home/unitree/control_robot/backend/src/services/requirements.txt" ]; then
-        info "Найден requirements.txt в services, устанавливаем зависимости..."
-        pip install -r /home/unitree/control_robot/backend/src/services/requirements.txt || warn "Не удалось установить зависимости из requirements.txt"
-    elif [ -f "/home/unitree/control_robot/backend/requirements.txt" ]; then
-        info "Найден requirements.txt в backend, устанавливаем зависимости..."
-        pip install -r /home/unitree/control_robot/backend/requirements.txt || warn "Не удалось установить зависимости из requirements.txt"
+    info "Создание виртуального окружения..."
+    if python3 -m venv /home/unitree/control_robot/backend/src/services/.venv; then
+        info "Виртуальное окружение создано успешно"
+        
+        # Сразу меняем права на виртуальное окружение
+        chown -R unitree:unitree /home/unitree/control_robot/backend/src/services/.venv || error "Не удалось изменить права на виртуальное окружение"
+        
+        # Активируем виртуальное окружение и устанавливаем зависимости
+        info "Активация виртуального окружения и установка зависимостей..."
+        source /home/unitree/control_robot/backend/src/services/.venv/bin/activate || error "Не удалось активировать виртуальное окружение"
+        
+        # Обновляем pip
+        pip install --upgrade pip || warn "Не удалось обновить pip"
+        
+        # Проверяем наличие requirements.txt в services директории
+        if [ -f "/home/unitree/control_robot/backend/src/services/requirements.txt" ]; then
+            info "Найден requirements.txt в services, устанавливаем зависимости..."
+            pip install -r /home/unitree/control_robot/backend/src/services/requirements.txt || warn "Не удалось установить зависимости из requirements.txt"
+        elif [ -f "/home/unitree/control_robot/backend/requirements.txt" ]; then
+            info "Найден requirements.txt в backend, устанавливаем зависимости..."
+            pip install -r /home/unitree/control_robot/backend/requirements.txt || warn "Не удалось установить зависимости из requirements.txt"
+        else
+            # Устанавливаем основные зависимости для camera_service.py
+            info "Установка основных Python зависимостей..."
+            pip install flask flask-cors opencv-python numpy || warn "Не удалось установить некоторые Python зависимости"
+        fi
+        
+        # Деактивируем виртуальное окружение
+        deactivate
+        
+        info "Python зависимости установлены в виртуальном окружении"
     else
-        # Устанавливаем основные зависимости для camera_service.py
-        info "Установка основных Python зависимостей..."
-        pip install flask flask-cors opencv-python numpy || warn "Не удалось установить некоторые Python зависимости"
+        error "Не удалось создать виртуальное окружение. Проверьте установку python3-venv"
     fi
-    
-    # Деактивируем виртуальное окружение
-    deactivate
-    
-    info "Python зависимости установлены в виртуальном окружении"
 }
 
 # Основная логика

@@ -412,12 +412,14 @@ create_python_venv() {
     
     log "Создание виртуального окружения Python..."
     
-    # Проверка наличия python3-venv
-    if ! python3 -c "import venv" 2>/dev/null; then
+    # Проверка и установка python3-venv
+    if ! dpkg -l | grep -q python3-venv; then
         error "python3-venv не установлен. Установка..."
         apt update || error "Не удалось обновить пакеты"
         apt install -y python3-venv || error "Не удалось установить python3-venv"
         info "python3-venv установлен"
+    else
+        info "python3-venv уже установлен"
     fi
     
     # Удаление старого виртуального окружения если существует
@@ -427,8 +429,9 @@ create_python_venv() {
         chown -R unitree:unitree "$venv_path" 2>/dev/null || true
         rm -rf "$venv_path"
     fi
-    
+ 
     # Создание нового виртуального окружения
+    info "Создание виртуального окружения..."
     if python3 -m venv "$venv_path"; then
         info "Виртуальное окружение создано успешно"
         
@@ -466,7 +469,7 @@ create_python_venv() {
             fi
         fi
     else
-        error "Не удалось создать виртуальное окружение"
+        error "Не удалось создать виртуальное окружение. Проверьте установку python3-venv"
         return 1
     fi
 }
