@@ -31,7 +31,7 @@ let processStartTime = null;
 // Константы для путей и типов
 let ROOT_PATH = process.platform === 'win32' 
   ? path.join(process.cwd(), 'test_files')
-  : '/home/unitree';
+  : '/home/unitree/control_robot/backend/test_files';
 const ITEM_TYPES = {
   FILE: 'file',
   DIRECTORY: 'directory'
@@ -53,7 +53,7 @@ const DEFAULT_CONFIG = {
       command: '/home/unitree/unitree_sdk2/build/bin/H1_RESET_POSITION eth0'
     }
   ],
-  rootPath: path.join(process.cwd(), 'tests_files'),
+  rootPath: '/home/unitree/control_robot/backend/test_files',
   RobotName: 'H-0000'
 };
 
@@ -713,14 +713,14 @@ async function initializeRootPath() {
         // Если нет доступа к указанному пути, используем путь по умолчанию
         ROOT_PATH = process.platform === 'win32'
           ? path.join(process.cwd(), 'test_files')
-          : '/home/unitree';
+          : '/home/unitree/control_robot/backend/test_files';
         await fs.mkdir(ROOT_PATH, { recursive: true });
       }
     } else {
       // Если путь не указан в конфиге, используем путь по умолчанию
       ROOT_PATH = process.platform === 'win32'
         ? path.join(process.cwd(), 'test_files')
-        : '/home/unitree';
+        : '/home/unitree/control_robot/backend/test_files';
       await fs.mkdir(ROOT_PATH, { recursive: true });
     }
   } catch (error) {
@@ -728,7 +728,7 @@ async function initializeRootPath() {
     // В случае ошибки используем путь по умолчанию
     ROOT_PATH = process.platform === 'win32'
       ? path.join(process.cwd(), 'test_files')
-      : '/home/unitree';
+      : '/home/unitree/control_robot/backend/test_files';
     await fs.mkdir(ROOT_PATH, { recursive: true }).catch(console.error);
   }
 }
@@ -907,7 +907,7 @@ function startPythonService() {
     const pythonPath = path.join(__dirname, 'src', 'services', 'camera_service.py');
     
     console.log('Запуск Python сервиса камер...');
-    pythonProcess = spawn('python', [pythonPath], {
+    pythonProcess = spawn('python3', [pythonPath], {
         stdio: ['pipe', 'pipe', 'pipe']
     });
 

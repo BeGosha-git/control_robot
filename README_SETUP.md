@@ -20,6 +20,7 @@ sudo ./setup.sh
 ```
 
 Этот скрипт выполняет **полную установку системы**:
+- Устанавливает Python3 и pip3
 - Устанавливает Docker и Docker Compose
 - Проверяет и настраивает Node.js/npm через nvm
 - Устанавливает зависимости backend (npm install)
@@ -105,14 +106,36 @@ sudo journalctl -u control_robot -f
 - Debian/Ubuntu система
 - Права root для установки
 - Интернет-соединение для загрузки зависимостей
+- **Docker и Docker Compose** (должны быть установлены заранее)
+- **Python3 и pip3** (должны быть установлены заранее)
 - nvm (Node Version Manager) - для управления Node.js
 
 ## Устранение неполадок
+
+### Проблемы с Python3
+```bash
+# Проверка версии Python3
+python3 --version
+
+# Установка Python3 (если не установлен)
+sudo apt update
+sudo apt install -y python3 python3-pip
+
+# Проверка pip3
+pip3 --version
+```
 
 ### Проблемы с Docker
 ```bash
 # Проверка статуса Docker
 sudo systemctl status docker
+
+# Установка Docker (если не установлен)
+curl -fsSL https://get.docker.com -o get-docker.sh
+sudo sh get-docker.sh
+
+# Добавление пользователя в группу docker
+sudo usermod -aG docker $USER
 
 # Перезапуск Docker
 sudo systemctl restart docker

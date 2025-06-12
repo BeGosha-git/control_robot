@@ -35,46 +35,49 @@ check_internet() {
     ping -c 1 8.8.8.8 > /dev/null 2>&1
 }
 
-# Функция для проверки и установки Docker
-check_and_install_docker() {
+# Функция для проверки Docker
+check_docker() {
     log "Проверка Docker..."
     
     # Проверка наличия Docker
-    if ! command -v docker &> /dev/null; then
-        warn "Docker не установлен. Попытка установки..."
-        
-        # Проверяем доступность интернета
-        if ! check_internet; then
-            error "Docker не установлен и нет подключения к интернету для установки"
-        fi
-        
-        info "Установка Docker..."
-        curl -fsSL https://get.docker.com -o get-docker.sh
-        sh get-docker.sh || error "Не удалось установить Docker"
-        rm get-docker.sh
+    if command -v docker &> /dev/null; then
+        info "Docker установлен"
     else
-        info "Docker уже установлен"
+        error "Docker не установлен. Пожалуйста, установите Docker вручную"
     fi
     
     # Проверка наличия Docker Compose
-    if ! command -v docker compose &> /dev/null; then
-        warn "Docker Compose не установлен. Попытка установки..."
-        
-        # Проверяем доступность интернета
-        if ! check_internet; then
-            error "Docker Compose не установлен и нет подключения к интернету для установки"
-        fi
-        
-        info "Установка Docker Compose..."
-        curl -L "https://github.com/docker/compose/releases/download/v2.24.5/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
-        chmod +x /usr/local/bin/docker-compose || error "Не удалось установить Docker Compose"
+    if command -v docker compose &> /dev/null; then
+        info "Docker Compose установлен"
     else
-        info "Docker Compose уже установлен"
+        error "Docker Compose не установлен. Пожалуйста, установите Docker Compose вручную"
     fi
     
     # Проверка прав доступа к Docker
-    if ! docker info &> /dev/null; then
-        error "Нет прав доступа к Docker. Убедитесь, что ваш пользователь входит в группу docker."
+    if docker info &> /dev/null; then
+        info "Docker доступен"
+    else
+        error "Нет прав доступа к Docker. Убедитесь, что ваш пользователь входит в группу docker"
+    fi
+}
+
+# Функция для проверки Python3
+check_python3() {
+    log "Проверка Python3..."
+    
+    # Проверка наличия Python3
+    if command -v python3 &> /dev/null; then
+        PYTHON_VERSION=$(python3 --version 2>/dev/null)
+        info "Python3 установлен: $PYTHON_VERSION"
+    else
+        error "Python3 не установлен. Пожалуйста, установите Python3 вручную"
+    fi
+    
+    # Проверка наличия pip3
+    if command -v pip3 &> /dev/null; then
+        info "pip3 установлен"
+    else
+        error "pip3 не установлен. Пожалуйста, установите pip3 вручную"
     fi
 }
 
@@ -218,7 +221,10 @@ main() {
     log "Установка и настройка системы H1..."
     
     # Проверка и установка Docker
-    check_and_install_docker
+    check_docker
+    
+    # Проверка и установка Python3
+    check_python3
     
     # Проверка и установка Node.js
     check_and_install_nodejs
