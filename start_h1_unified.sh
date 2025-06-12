@@ -77,7 +77,7 @@ update_python_dependencies() {
     log "Проверка и обновление Python зависимостей..."
     
     # Проверяем наличие виртуального окружения
-    if [ -d "/home/unitree/control_robot/backend/src/services/.venv" ]; then
+    if [ -d "/home/unitree/control_robot/backend/src/services/.venv" ] && [ -f "/home/unitree/control_robot/backend/src/services/.venv/bin/activate" ]; then
         info "Виртуальное окружение найдено, обновляем зависимости..."
         
         cd /home/unitree/control_robot/backend/src/services || warn "Не удалось перейти в директорию services"
@@ -100,7 +100,8 @@ update_python_dependencies() {
         
         info "Python зависимости обновлены"
     else
-        warn "Виртуальное окружение не найдено, пропускаем обновление"
+        warn "Виртуальное окружение не найдено или повреждено, создаем новое..."
+        create_python_venv
     fi
 }
 
