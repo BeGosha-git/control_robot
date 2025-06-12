@@ -12,7 +12,6 @@ WorkingDirectory=/home/unitree/control_robot
 ExecStart=/home/unitree/control_robot/start_h1_unified.sh
 ExecStop=/home/unitree/control_robot/stop_h1.sh
 Restart=always
-RestartSec=10
 StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=control_robot
@@ -27,10 +26,6 @@ ReadWritePaths=/home/unitree
 ReadWritePaths=/home/unitree/control_robot
 ReadWritePaths=/home/unitree/unitree_sdk2-main
 ReadWritePaths=/home/unitree/unitree_sdk2
-
-# Таймауты
-TimeoutStartSec=300
-TimeoutStopSec=60
 
 [Install]
 WantedBy=multi-user.target 
