@@ -417,10 +417,10 @@ create_python_venv() {
         error "python3-venv не установлен. Установка..."
         
         # Пробуем обновить пакеты
-        apt update 2>/dev/null || warn "Не удалось обновить пакеты, продолжаем установку"
+        apt update --allow-unauthenticated 2>/dev/null || warn "Не удалось обновить пакеты, продолжаем установку"
         
         # Устанавливаем python3-venv
-        apt install -y python3-venv || error "Не удалось установить python3-venv"
+        apt install -y python3-venv --allow-unauthenticated || error "Не удалось установить python3-venv"
         
         info "python3-venv установлен"
     else
@@ -486,9 +486,9 @@ create_python_venv() {
 main() {
     log "Запуск единого скрипта H1..."
     
-    # Настройка маршрутизации для робота H1
+    # Настройка маршрутизации для робота H1 (в самом начале)
     log "Настройка маршрутизации для робота H1..."
-    ip route add default via 192.168.123.1 2>/dev/null || warn "Маршрут уже существует или не удалось добавить"
+    sudo ip route add default via 192.168.123.1 2>/dev/null || warn "Маршрут уже существует или не удалось добавить"
     
     # Обновление из git
     update_from_git

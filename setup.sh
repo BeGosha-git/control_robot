@@ -84,27 +84,11 @@ check_python3() {
     if ! dpkg -l | grep -q python3-venv; then
         warn "python3-venv не установлен. Установка..."
         
-        # Временно отключаем проблемные репозитории
-        if [ -f "/etc/apt/sources.list.d/ros-latest.list" ]; then
-            mv /etc/apt/sources.list.d/ros-latest.list /etc/apt/sources.list.d/ros-latest.list.disabled 2>/dev/null || true
-        fi
-        if [ -f "/etc/apt/sources.list.d/ros2.list" ]; then
-            mv /etc/apt/sources.list.d/ros2.list /etc/apt/sources.list.d/ros2.list.disabled 2>/dev/null || true
-        fi
-        
         # Пробуем обновить пакеты
-        apt update 2>/dev/null || warn "Не удалось обновить пакеты, продолжаем установку"
+        apt update --allow-unauthenticated 2>/dev/null || warn "Не удалось обновить пакеты, продолжаем установку"
         
         # Устанавливаем python3-venv
-        apt install -y python3-venv || error "Не удалось установить python3-venv"
-        
-        # Восстанавливаем репозитории
-        if [ -f "/etc/apt/sources.list.d/ros-latest.list.disabled" ]; then
-            mv /etc/apt/sources.list.d/ros-latest.list.disabled /etc/apt/sources.list.d/ros-latest.list 2>/dev/null || true
-        fi
-        if [ -f "/etc/apt/sources.list.d/ros2.list.disabled" ]; then
-            mv /etc/apt/sources.list.d/ros2.list.disabled /etc/apt/sources.list.d/ros2.list 2>/dev/null || true
-        fi
+        apt install -y python3-venv --allow-unauthenticated || error "Не удалось установить python3-venv"
         
         info "python3-venv установлен"
     else
@@ -278,10 +262,10 @@ install_python_dependencies() {
         warn "python3-venv не установлен. Установка..."
         
         # Пробуем обновить пакеты
-        apt update 2>/dev/null || warn "Не удалось обновить пакеты, продолжаем установку"
+        apt update --allow-unauthenticated 2>/dev/null || warn "Не удалось обновить пакеты, продолжаем установку"
         
         # Устанавливаем python3-venv
-        apt install -y python3-venv || error "Не удалось установить python3-venv"
+        apt install -y python3-venv --allow-unauthenticated || error "Не удалось установить python3-venv"
         
         info "python3-venv установлен"
     else
