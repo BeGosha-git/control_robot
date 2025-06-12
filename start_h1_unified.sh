@@ -403,6 +403,44 @@ start_system_service() {
     fi
 }
 
+# Функция для создания виртуального окружения Python
+create_python_venv() {
+    local venv_path="$BACKEND_DIR/src/services/.venv"
+    
+    log "Создание виртуального окружения Python..."
+    
+    # Проверка наличия python3-venv
+    if ! python3 -c "import venv" 2>/dev/null; then
+        error "python3-venv не установлен. Установка..."
+        apt update || error "Не удалось обновить пакеты"
+        apt install -y python3-venv || error "Не удалось установить python3-venv"
+        info "python3-venv установлен"
+    fi
+    
+    # Удаление старого виртуального окружения если существует
+    if [ -d "$venv_path" ]; then
+        log "Удаление старого виртуального окружения..."
+        rm -rf "$venv_path"
+    fi
+    
+    # Создание нового виртуального окружения
+    if python3 -m venv "$venv_path"; then
+        info "Виртуальное окружение создано успешно"
+        
+        # Установка зависимостей
+        log "Установка Python зависимостей..."
+        if "$venv_path/bin/pip" install -r "$BACKEND_DIR/requirements.txt"; then
+            info "Python зависимости установлены"
+        else
+            error "Не удалось установить Python зависимости"
+            return 1
+        fi
+    else
+        error "Не удалось создать виртуальное окружение"
+        return 1
+    fi
+}
+
 # Основная логика
 main() {
     log "Запуск единого скрипта H1..."

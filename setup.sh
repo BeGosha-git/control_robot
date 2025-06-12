@@ -79,6 +79,16 @@ check_python3() {
     else
         error "pip3 не установлен. Пожалуйста, установите pip3 вручную"
     fi
+    
+    # Проверка наличия python3-venv
+    if ! python3 -c "import venv" 2>/dev/null; then
+        warn "python3-venv не установлен. Установка..."
+        apt update || error "Не удалось обновить пакеты"
+        apt install -y python3-venv || error "Не удалось установить python3-venv"
+        info "python3-venv установлен"
+    else
+        info "python3-venv уже установлен"
+    fi
 }
 
 # Функция для проверки и установки Node.js
