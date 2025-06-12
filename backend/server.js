@@ -1042,6 +1042,13 @@ process.on('SIGTERM', () => {
 // Предотвращаем случайное завершение при ошибках
 process.on('uncaughtException', (error) => {
     console.error('Необработанное исключение:', error);
+    
+    // Не останавливаем Node.js при ошибках Python сервиса
+    if (error.message && error.message.includes('Python')) {
+        console.log('Ошибка Python сервиса, Node.js продолжает работать');
+        return;
+    }
+    
     if (!isShuttingDown) {
         console.log('Перезапуск сервера через 5 секунд...');
         setTimeout(() => {
@@ -1052,6 +1059,13 @@ process.on('uncaughtException', (error) => {
 
 process.on('unhandledRejection', (reason, promise) => {
     console.error('Необработанное отклонение промиса:', reason);
+    
+    // Не останавливаем Node.js при ошибках Python сервиса
+    if (reason && reason.message && reason.message.includes('Python')) {
+        console.log('Ошибка Python сервиса, Node.js продолжает работать');
+        return;
+    }
+    
     if (!isShuttingDown) {
         console.log('Перезапуск сервера через 5 секунд...');
         setTimeout(() => {
@@ -1065,7 +1079,17 @@ const PYTHON_SERVICE_URL = 'http://localhost:5000';
 
 // Прокси для всех API запросов к камерам
 app.use('/api/cameras', async (req, res) => {
-      try {
+    // Проверяем, доступен ли Python сервис
+    if (!isPythonRunning) {
+        console.log('Python сервис недоступен, возвращаем fallback ответ');
+        return res.status(503).json({ 
+            error: 'Сервис камер временно недоступен',
+            details: 'Python сервис камер не запущен или недоступен',
+            fallback: true
+        });
+    }
+    
+    try {
         const response = await fetch(`${PYTHON_SERVICE_URL}${req.url}`, {
             method: req.method,
             headers: {
@@ -1078,15 +1102,26 @@ app.use('/api/cameras', async (req, res) => {
         res.status(response.status).json(data);
     } catch (error) {
         console.error('Ошибка проксирования запроса к Python сервису:', error);
-    res.status(500).json({ 
+        res.status(503).json({ 
             error: 'Ошибка подключения к сервису камер',
-            details: error.message 
-    });
-  }
+            details: error.message,
+            fallback: true
+        });
+    }
 });
 
 app.use('/api/camera', async (req, res) => {
-  try {
+    // Проверяем, доступен ли Python сервис
+    if (!isPythonRunning) {
+        console.log('Python сервис недоступен, возвращаем fallback ответ');
+        return res.status(503).json({
+            error: 'Сервис камер временно недоступен',
+            details: 'Python сервис камер не запущен или недоступен',
+            fallback: true
+        });
+    }
+    
+    try {
         const response = await fetch(`${PYTHON_SERVICE_URL}${req.url}`, {
             method: req.method,
             headers: {
@@ -1097,13 +1132,14 @@ app.use('/api/camera', async (req, res) => {
         
         const data = await response.json();
         res.status(response.status).json(data);
-  } catch (error) {
+    } catch (error) {
         console.error('Ошибка проксирования запроса к Python сервису:', error);
-    res.status(500).json({
+        res.status(503).json({
             error: 'Ошибка подключения к сервису камер',
-      details: error.message
-    });
-  }
+            details: error.message,
+            fallback: true
+        });
+    }
 });
 
 // Статус сервера
