@@ -252,6 +252,20 @@ setup_directories_and_permissions() {
 install_python_dependencies() {
     log "Установка Python зависимостей..."
     
+    # Проверка наличия python3-venv
+    if ! python3 -c "import venv" 2>/dev/null; then
+        warn "python3-venv не установлен. Установка..."
+        apt update || error "Не удалось обновить пакеты"
+        apt install -y python3-venv || error "Не удалось установить python3-venv"
+        info "python3-venv установлен"
+    fi
+    
+    # Удаляем старое виртуальное окружение если есть
+    if [ -d "/home/unitree/control_robot/backend/src/services/.venv" ]; then
+        info "Удаление старого виртуального окружения..."
+        rm -rf /home/unitree/control_robot/backend/src/services/.venv
+    fi
+    
     # Создаем новое виртуальное окружение
     python3 -m venv /home/unitree/control_robot/backend/src/services/.venv || error "Не удалось создать виртуальное окружение"
     
@@ -263,9 +277,9 @@ install_python_dependencies() {
     pip install --upgrade pip || warn "Не удалось обновить pip"
     
     # Проверяем наличие requirements.txt
-    if [ -f "requirements.txt" ]; then
+    if [ -f "/home/unitree/control_robot/backend/requirements.txt" ]; then
         info "Найден requirements.txt, устанавливаем зависимости..."
-        pip install -r requirements.txt || warn "Не удалось установить зависимости из requirements.txt"
+        pip install -r /home/unitree/control_robot/backend/requirements.txt || warn "Не удалось установить зависимости из requirements.txt"
     else
         # Устанавливаем основные зависимости для camera_service.py
         info "Установка основных Python зависимостей..."
@@ -277,8 +291,6 @@ install_python_dependencies() {
     
     # Устанавливаем права на виртуальное окружение
     chown -R unitree:unitree /home/unitree/control_robot/backend/src/services/.venv || warn "Не удалось изменить владельца виртуального окружения"
-    
-    cd /home/unitree/control_robot || error "Не удалось вернуться в корневую директорию"
     
     info "Python зависимости установлены в виртуальном окружении"
 }
