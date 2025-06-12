@@ -89,15 +89,12 @@ update_from_git() {
     fi
     
     # Проверяем и настраиваем правильный remote origin
-    CURRENT_REMOTE=$(git remote get-url origin 2>/dev/null || echo "")
-    CORRECT_REMOTE="https://github.com/BeGosha-git/control_robot.git"
-    
-    if [ "$CURRENT_REMOTE" != "$CORRECT_REMOTE" ]; then
+    if [ "$(git remote get-url origin 2>/dev/null || echo "")" != "https://github.com/BeGosha-git/control_robot.git" ]; then
         info "Настройка правильного Git репозитория..."
-        if [ -n "$CURRENT_REMOTE" ]; then
+        if [ -n "$(git remote get-url origin 2>/dev/null)" ]; then
             git remote remove origin
         fi
-        git remote add origin "$CORRECT_REMOTE" || warn "Не удалось добавить remote origin"
+        git remote add origin "https://github.com/BeGosha-git/control_robot.git" || warn "Не удалось добавить remote origin"
     fi
     
     # Сохраняем configs.conf если он существует
@@ -131,27 +128,11 @@ check_and_install_nodejs() {
     
     # Проверяем наличие nvm
     if [ -d "/home/unitree/.nvm" ] && [ -f "/home/unitree/.nvm/nvm.sh" ]; then
-        info "Обнаружен nvm. Использование nvm версии..."
-        
-        # Используем nvm напрямую через sudo -u unitree
-        NODE_CMD="sudo -u unitree bash -c 'source /home/unitree/.nvm/nvm.sh && node'"
-        NPM_CMD="sudo -u unitree bash -c 'source /home/unitree/.nvm/nvm.sh && npm'"
+        info "Обнаружен nvm. Проверка версий..."
         
         # Проверяем версии
-        NODE_VERSION=$(sudo -u unitree bash -c "source /home/unitree/.nvm/nvm.sh && node --version" 2>/dev/null)
-        NPM_VERSION=$(sudo -u unitree bash -c "source /home/unitree/.nvm/nvm.sh && npm --version" 2>/dev/null)
-        
-        if [ -n "$NODE_VERSION" ] && [ -n "$NPM_VERSION" ]; then
-            info "Node.js версия: $NODE_VERSION"
-            info "npm версия: $NPM_VERSION"
-            
-            # Экспортируем команды для использования в других функциях
-            export NPM_CMD="$NPM_CMD"
-            export NODE_CMD="$NODE_CMD"
-            return 0
-        else
-            error "Не удалось получить версии Node.js/npm из nvm"
-        fi
+        info "Node.js версия: $(sudo -u unitree bash -c "source /home/unitree/.nvm/nvm.sh && node --version" 2>/dev/null)"
+        info "npm версия: $(sudo -u unitree bash -c "source /home/unitree/.nvm/nvm.sh && npm --version" 2>/dev/null)"
     else
         error "nvm не найден. Пожалуйста, установите nvm"
     fi
@@ -171,13 +152,8 @@ install_backend_dependencies() {
             error "node_modules не найден и нет подключения к интернету для установки зависимостей"
         fi
         
-        # Используем найденную команду npm
-        if [ -n "$NPM_CMD" ]; then
-            info "Установка зависимостей через nvm..."
-            $NPM_CMD install || error "Не удалось установить зависимости backend"
-        else
-            error "Команда npm не найдена"
-        fi
+        info "Установка зависимостей через nvm..."
+        sudo -u unitree bash -c "source /home/unitree/.nvm/nvm.sh && npm install" || error "Не удалось установить зависимости backend"
     else
         info "Зависимости backend уже установлены"
     fi
@@ -201,12 +177,11 @@ stop_existing_processes() {
     
     # Остановка backend процесса
     if [ -f "/home/unitree/backend.pid" ]; then
-        BACKEND_PID=$(cat /home/unitree/backend.pid)
-        if kill -0 $BACKEND_PID 2>/dev/null; then
-            info "Остановка backend процесса (PID: $BACKEND_PID)..."
-            kill $BACKEND_PID
+        if kill -0 $(cat /home/unitree/backend.pid) 2>/dev/null; then
+            info "Остановка backend процесса (PID: $(cat /home/unitree/backend.pid))..."
+            kill $(cat /home/unitree/backend.pid)
             sleep 2
-            kill -9 $BACKEND_PID 2>/dev/null || true
+            kill -9 $(cat /home/unitree/backend.pid) 2>/dev/null || true
         fi
         rm -f /home/unitree/backend.pid
     fi
@@ -217,22 +192,15 @@ start_backend() {
     log "Запуск backend..."
     cd backend || error "Не удалось перейти в директорию backend"
     
-    # Запуск backend в фоне с найденной командой node
-    if [ -n "$NODE_CMD" ]; then
-        info "Запуск backend через nvm..."
-        nohup $NODE_CMD server.js > /home/unitree/backend.log 2>&1 &
-    else
-        error "Команда node не найдена"
-    fi
-    BACKEND_PID=$!
-    echo $BACKEND_PID > /home/unitree/backend.pid
+    # Запуск backend в фоне через nvm
+    info "Запуск backend через nvm..."
+    sudo -u unitree bash -c "source /home/unitree/.nvm/nvm.sh && nohup node server.js > /home/unitree/backend.log 2>&1 &" || error "Не удалось запустить backend"
     
-    # Ждем немного для запуска
-    sleep 3
-    
-    # Проверяем, что процесс запущен
-    if kill -0 $BACKEND_PID 2>/dev/null; then
-        info "Backend запущен (PID: $BACKEND_PID)"
+    # Получаем PID процесса
+    sleep 2
+    if [ -n "$(pgrep -f "node server.js" | head -1)" ]; then
+        echo $(pgrep -f "node server.js" | head -1) > /home/unitree/backend.pid
+        info "Backend запущен (PID: $(cat /home/unitree/backend.pid))"
     else
         error "Не удалось запустить backend"
     fi
