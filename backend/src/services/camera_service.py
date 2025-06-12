@@ -279,8 +279,20 @@ def stream_frames():
     return Response(generate(), mimetype='text/plain')
 
 if __name__ == '__main__':
-    # Автоматически запускаем все доступные камеры при старте
-    camera_service.start_all_cameras()
+    # Проверяем наличие доступных камер перед запуском
+    available_cameras = camera_service.discover_cameras()
+    
+    if len(available_cameras) == 0:
+        logger.error("Нет доступных камер. Сервис запускается без автоматического старта камер.")
+        print("ВНИМАНИЕ: Сервис запущен, но нет доступных камер для автоматического старта.")
+        print("   Используйте API для ручного управления камерами.")
+    else:
+        logger.info(f"Найдено {len(available_cameras)} камер. Запускаем все доступные камеры...")
+        print(f"Найдено {len(available_cameras)} камер. Запускаем все доступные камеры...")
+        # Автоматически запускаем все доступные камеры при старте
+        started_count = camera_service.start_all_cameras()
+        print(f"Запущено {started_count} камер из {len(available_cameras)} доступных")
     
     # Запускаем Flask сервер
+    print("Запуск веб-сервера на http://localhost:5000")
     app.run(host='0.0.0.0', port=5000, debug=False, threaded=True) 

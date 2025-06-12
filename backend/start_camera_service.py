@@ -7,8 +7,60 @@ import sys
 import os
 import subprocess
 import time
+import cv2
+
+def check_camera_access():
+    """Проверка доступа к камерам"""
+    print("Проверка доступа к камерам...")
+    
+    available_cameras = []
+    
+    # Проверяем камеры с индексами от 0 до 9
+    for i in range(10):
+        try:
+            cap = cv2.VideoCapture(i)
+            if cap.isOpened():
+                ret, frame = cap.read()
+                if ret:
+                    # Получаем информацию о камере
+                    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+                    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+                    fps = cap.get(cv2.CAP_PROP_FPS)
+                    
+                    camera_info = {
+                        'id': i,
+                        'name': f'Камера {i}',
+                        'width': width,
+                        'height': height,
+                        'fps': fps
+                    }
+                    available_cameras.append(camera_info)
+                    print(f"OK: Найдена камера {i}: {width}x{height} @ {fps}fps")
+                else:
+                    print(f"ОШИБКА: Камера {i}: не удалось прочитать кадр")
+                
+                cap.release()
+            else:
+                print(f"ОШИБКА: Камера {i}: недоступна")
+                
+        except Exception as e:
+            print(f"ОШИБКА: Ошибка при проверке камеры {i}: {e}")
+    
+    print(f"\nВсего найдено доступных камер: {len(available_cameras)}")
+    
+    if len(available_cameras) == 0:
+        print("НЕТ ДОСТУПНЫХ КАМЕР. Сервис не будет запущен.")
+        return False
+    
+    print("Доступные камеры найдены. Запускаем сервис...")
+    return True
 
 def main():
+    # Проверяем доступ к камерам
+    if not check_camera_access():
+        print("Сервис камер не запущен из-за отсутствия доступных камер.")
+        sys.exit(1)
+    
     # Путь к сервису камер
     service_path = os.path.join(os.path.dirname(__file__), 'src', 'services', 'camera_service.py')
     
