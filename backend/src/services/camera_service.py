@@ -354,14 +354,6 @@ if __name__ == '__main__':
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
     
-    # Создаем директорию test_files если её нет
-    test_files_dir = os.path.join(os.path.dirname(__file__), '..', '..', 'test_files')
-    try:
-        os.makedirs(test_files_dir, exist_ok=True)
-        print(f"Директория test_files готова: {test_files_dir}")
-    except Exception as e:
-        print(f"Ошибка создания директории test_files: {e}")
-    
     # Проверяем наличие доступных камер перед запуском
     available_cameras = camera_service.discover_cameras()
     
