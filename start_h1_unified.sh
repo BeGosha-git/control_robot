@@ -319,8 +319,8 @@ EOF
     sudo -u unitree "$TEMP_SCRIPT" &
     BACKEND_PID=$!
     
-    # Ждем немного для запуска
-    sleep 5
+    # Ждем больше времени для запуска в systemd окружении
+    sleep 10
     
     # Проверяем, что процесс запущен и получаем его PID
     if kill -0 $BACKEND_PID 2>/dev/null; then
@@ -329,7 +329,13 @@ EOF
             echo $BACKEND_PID > /home/unitree/backend.pid
             info "Backend запущен (PID: $BACKEND_PID)"
         else
-            error "Процесс запущен, но не является node server.js"
+            # Проверяем логи для диагностики
+            if [ -f "/home/unitree/backend.log" ]; then
+                error "Процесс запущен, но не является node server.js. Последние строки лога:"
+                tail -10 /home/unitree/backend.log
+            else
+                error "Процесс запущен, но не является node server.js. Лог-файл не создан."
+            fi
         fi
     else
         # Проверяем логи для диагностики
