@@ -252,22 +252,12 @@ setup_directories_and_permissions() {
 install_python_dependencies() {
     log "Установка Python зависимостей..."
     
-    # Создаем виртуальное окружение
-    info "Создание виртуального окружения Python..."
-    cd /home/unitree/control_robot/backend/src/services || error "Не удалось перейти в директорию services"
-    
-    # Удаляем старое виртуальное окружение если есть
-    if [ -d ".venv" ]; then
-        info "Удаление старого виртуального окружения..."
-        rm -rf .venv
-    fi
-    
     # Создаем новое виртуальное окружение
-    python3 -m venv .venv || error "Не удалось создать виртуальное окружение"
+    python3 -m venv /home/unitree/control_robot/backend/src/services/.venv || error "Не удалось создать виртуальное окружение"
     
     # Активируем виртуальное окружение и устанавливаем зависимости
     info "Активация виртуального окружения и установка зависимостей..."
-    source .venv/bin/activate || error "Не удалось активировать виртуальное окружение"
+    source /home/unitree/control_robot/backend/src/services/.venv/bin/activate || error "Не удалось активировать виртуальное окружение"
     
     # Обновляем pip
     pip install --upgrade pip || warn "Не удалось обновить pip"
@@ -286,7 +276,7 @@ install_python_dependencies() {
     deactivate
     
     # Устанавливаем права на виртуальное окружение
-    chown -R unitree:unitree .venv || warn "Не удалось изменить владельца виртуального окружения"
+    chown -R unitree:unitree /home/unitree/control_robot/backend/src/services/.venv || warn "Не удалось изменить владельца виртуального окружения"
     
     cd /home/unitree/control_robot || error "Не удалось вернуться в корневую директорию"
     

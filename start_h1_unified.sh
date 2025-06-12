@@ -83,7 +83,7 @@ update_python_dependencies() {
         cd /home/unitree/control_robot/backend/src/services || warn "Не удалось перейти в директорию services"
         
         # Активируем виртуальное окружение
-        source .venv/bin/activate || warn "Не удалось активировать виртуальное окружение"
+        source /home/unitree/control_robot/backend/src/services/.venv/bin/activate || warn "Не удалось активировать виртуальное окружение"
         
         # Обновляем pip
         pip install --upgrade pip 2>/dev/null || warn "Не удалось обновить pip"
