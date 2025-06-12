@@ -23,6 +23,11 @@ cleanup_temp_files() {
 # Устанавливаем trap для очистки при выходе
 trap cleanup_temp_files EXIT
 
+# Функция для проверки интернета
+check_internet() {
+    ping -c 1 8.8.8.8 > /dev/null 2>&1
+}
+
 # Функции для вывода сообщений
 log() {
     echo -e "${GREEN}[H1 Setup]${NC} $1"
@@ -51,7 +56,7 @@ if ! command -v docker &> /dev/null; then
     warn "Docker не установлен. Попытка установки..."
     
     # Проверяем доступность интернета
-    if ! ping -c 1 get.docker.com > /dev/null 2>&1; then
+    if ! check_internet; then
         error "Docker не установлен и нет подключения к интернету для установки"
     fi
     
@@ -66,7 +71,7 @@ if ! command -v docker compose &> /dev/null; then
     warn "Docker Compose не установлен. Попытка установки..."
     
     # Проверяем доступность интернета
-    if ! ping -c 1 github.com > /dev/null 2>&1; then
+    if ! check_internet; then
         error "Docker Compose не установлен и нет подключения к интернету для установки"
     fi
     
@@ -85,7 +90,7 @@ update_from_git() {
     log "Проверка обновлений из Git..."
     
     # Проверяем доступность интернета
-    if ! ping -c 1 github.com > /dev/null 2>&1; then
+    if ! check_internet; then
         warn "Нет подключения к интернету. Пропускаем обновление из Git."
         return 0
     fi
@@ -227,7 +232,7 @@ check_and_install_nodejs() {
         warn "npm не найден в стандартных местах. Попытка установки Node.js..."
         
         # Проверяем доступность интернета
-        if ! ping -c 1 deb.nodesource.com > /dev/null 2>&1; then
+        if ! check_internet; then
             error "npm не найден и нет подключения к интернету для установки Node.js"
         fi
         
@@ -285,7 +290,7 @@ install_backend_dependencies() {
         warn "node_modules не найден. Установка зависимостей..."
         
         # Проверяем доступность интернета
-        if ! ping -c 1 registry.npmjs.org > /dev/null 2>&1; then
+        if ! check_internet; then
             error "node_modules не найден и нет подключения к интернету для установки зависимостей"
         fi
         
@@ -334,10 +339,6 @@ stop_existing_processes() {
         fi
         rm -f /home/unitree/backend.pid
     fi
-    
-    # Очистка неиспользуемых Docker ресурсов
-    log "Очистка неиспользуемых Docker ресурсов..."
-    docker system prune -f
 }
 
 # Функция для запуска backend
@@ -383,13 +384,13 @@ start_frontend() {
         info "Docker образ найден"
         
         # Проверяем, были ли обновления из Git (если есть интернет)
-        if ping -c 1 github.com > /dev/null 2>&1; then
+        if check_internet; then
             # Проверяем, есть ли изменения в frontend директории
             if git status --porcelain frontend/ | grep -q .; then
                 info "Обнаружены изменения в frontend. Пересборка образа..."
                 
                 # Проверяем доступность интернета для загрузки образов
-                if ! ping -c 1 docker.io > /dev/null 2>&1; then
+                if ! check_internet; then
                     warn "Нет интернета для пересборки. Запуск существующего образа..."
                     docker compose up -d || error "Ошибка при запуске frontend контейнера"
                 else
@@ -413,7 +414,7 @@ start_frontend() {
         warn "Docker образ не найден. Попытка сборки..."
         
         # Проверяем доступность интернета для загрузки образов
-        if ! ping -c 1 docker.io > /dev/null 2>&1; then
+        if ! check_internet; then
             error "Docker образ не найден и нет подключения к интернету для загрузки базовых образов"
         fi
         
