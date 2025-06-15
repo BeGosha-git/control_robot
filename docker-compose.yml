@@ -1,17 +1,79 @@
 version: '3.8'
 
 services:
+  # Backend сервисы (сервис-менеджер + камера)
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: h1_backend
+    restart: unless-stopped
+    environment:
+      - NODE_SERVER_URL=http://localhost:3000
+      - CAMERA_DEVICE=/dev/video0
+      - CAMERA_PORT=5002
+      - SERVICE_MANAGER_PORT=5000
+      - CHECK_INTERVAL=5
+      - STREAM_CLEANUP_INTERVAL=5
+    ports:
+      - "5000:5000"  # Сервис-менеджер
+      - "5002:5002"  # Камера
+    volumes:
+      - /dev/video0:/dev/video0:rw  # Доступ к камере
+      - /dev/video1:/dev/video1:rw
+      - /dev/video2:/dev/video2:rw
+      - /dev/video3:/dev/video3:rw
+      - /dev/video4:/dev/video4:rw
+      - /dev/video5:/dev/video5:rw
+      - /dev/video6:/dev/video6:rw
+      - /dev/video7:/dev/video7:rw
+      - /dev/video8:/dev/video8:rw
+      - /dev/video9:/dev/video9:rw
+    devices:
+      - /dev/video0:/dev/video0
+      - /dev/video1:/dev/video1
+      - /dev/video2:/dev/video2
+      - /dev/video3:/dev/video3
+      - /dev/video4:/dev/video4
+      - /dev/video5:/dev/video5
+      - /dev/video6:/dev/video6
+      - /dev/video7:/dev/video7
+      - /dev/video8:/dev/video8
+      - /dev/video9:/dev/video9
+    networks:
+      - h1_network
+
+  # Frontend React приложение
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+    container_name: h1_frontend
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - REACT_APP_API_URL=http://localhost/api
+    networks:
+      - h1_network
+    depends_on:
+      - backend
+
+  # Nginx для проксирования запросов
+  nginx:
+    image: nginx:alpine
+    container_name: h1_nginx
+    restart: unless-stopped
     ports:
       - "80:80"
-    container_name: h1-frontend
-    restart: unless-stopped
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
     networks:
-      - h1-network
+      - h1_network
+    depends_on:
+      - backend
+      - frontend
 
 networks:
-  h1-network:
+  h1_network:
     driver: bridge 

@@ -1,6 +1,7 @@
 # Зависимости
-/src/services/.venv
+venv
 /node_modules
+__pycache__
 
 # Логи
 logs

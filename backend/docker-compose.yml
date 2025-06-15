@@ -1,0 +1,75 @@
+version: '3.8'
+
+services:
+  # Сервис камер (только Python сервисы в Docker)
+  camera-service:
+    build:
+      context: .
+      dockerfile: Dockerfile.camera
+    ports:
+      - "5000:5000"
+    environment:
+      - PYTHONUNBUFFERED=1
+    volumes:
+      # Универсальное монтирование камер для Linux и Windows
+      - /dev/video0:/dev/video0:rw
+      - /dev/video1:/dev/video1:rw
+      - /dev/video2:/dev/video2:rw
+      - /dev/video3:/dev/video3:rw
+      - /dev/video4:/dev/video4:rw
+      - /dev/video5:/dev/video5:rw
+      - /dev/video6:/dev/video6:rw
+      - /dev/video7:/dev/video7:rw
+      - /dev/video8:/dev/video8:rw
+      - /dev/video9:/dev/video9:rw
+    devices:
+      # Альтернативный способ доступа к камерам (Linux)
+      - /dev/video0:/dev/video0
+      - /dev/video1:/dev/video1
+      - /dev/video2:/dev/video2
+      - /dev/video3:/dev/video3
+      - /dev/video4:/dev/video4
+      - /dev/video5:/dev/video5
+      - /dev/video6:/dev/video6
+      - /dev/video7:/dev/video7
+      - /dev/video8:/dev/video8
+      - /dev/video9:/dev/video9
+    privileged: true  # Для доступа к устройствам
+    networks:
+      - h1-network
+    restart: unless-stopped
+    # Универсальные настройки для разных ОС
+    platform: linux/amd64  # Явно указываем платформу
+    # Настройки для Windows
+    extra_hosts:
+      - "host.docker.internal:host-gateway"  # Для доступа к хосту на Windows
+
+  # Сервис-менеджер (только для Python сервисов)
+  service-manager:
+    build:
+      context: .
+      dockerfile: Dockerfile.service-manager
+    environment:
+      - PYTHONUNBUFFERED=1
+      # Универсальный URL для Node.js сервера
+      - NODE_SERVER_URL=http://host.docker.internal:3001
+    networks:
+      - h1-network
+    restart: unless-stopped
+    # Универсальные настройки для разных ОС
+    platform: linux/amd64
+    # Настройки для Windows
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+networks:
+  h1-network:
+    driver: bridge
+    # Настройки для лучшей совместимости
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+
+volumes:
+  test_files:
+    driver: local 
